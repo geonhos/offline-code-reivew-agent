@@ -1,0 +1,46 @@
+# Ollama Modelfile for Qwen2.5-Coder 7B (폐쇄망 배포용)
+#
+# ─── 폐쇄망 배포 방법 ───────────────────────────────────────
+#
+# [방법 1] 온라인 머신에서 모델 캐시 복사 (권장)
+#   온라인: ollama pull qwen2.5-coder:7b
+#   복사:   tar czf ollama-models.tar.gz ~/.ollama/models/
+#   폐쇄망: tar xzf ollama-models.tar.gz -C ~/
+#   생성:   ollama create qwen2.5-coder-reviewer -f Modelfile
+#
+# [방법 2] GGUF 파일 직접 반입
+#   HuggingFace에서 GGUF 다운로드 후 아래 FROM 라인을 변경:
+#   FROM ./models/qwen2.5-coder-7b-instruct-q4_k_m.gguf
+#
+# [온라인 환경]
+#   ollama pull qwen2.5-coder:7b
+#   ollama create qwen2.5-coder-reviewer -f Modelfile
+#
+# ────────────────────────────────────────────────────────────
+
+# 베이스 모델 지정
+# Qwen2.5-Coder 7B: 코드 생성/리뷰에 특화된 경량 모델
+# 폐쇄망에서 GGUF 직접 반입 시 아래 경로를 수정
+FROM qwen2.5-coder:7b
+
+# temperature: 낮을수록 일관되고 보수적인 응답 (코드 리뷰는 창의성보다 정확성이 중요)
+PARAMETER temperature 0.1
+
+# top_p: nucleus sampling 범위. 0.9면 상위 90% 확률 토큰에서 샘플링
+PARAMETER top_p 0.9
+
+# num_ctx: 컨텍스트 윈도우 크기 (토큰 수)
+# 8192 = diff + 가이드라인 + 시스템 프롬프트를 담기에 충분한 크기
+# 메모리 16GB 환경 기준, 7B 모델 + 8K 컨텍스트는 약 6~8GB VRAM 사용
+PARAMETER num_ctx 8192
+
+# 시스템 프롬프트: 코드 리뷰어 역할 및 리뷰 관점 정의
+# 이후 src/prompt.py에서 더 상세한 리뷰 지시를 추가로 전달
+SYSTEM """You are an expert code reviewer. You review code changes carefully and provide constructive feedback focusing on:
+- Code correctness and potential bugs
+- Security vulnerabilities
+- Performance issues
+- Adherence to coding guidelines and best practices
+- Code readability and maintainability
+
+Respond in the requested structured format."""
