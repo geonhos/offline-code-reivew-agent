@@ -18,8 +18,7 @@ CREATE TABLE IF NOT EXISTS guidelines (
 );
 
 CREATE INDEX IF NOT EXISTS idx_guidelines_embedding
-    ON guidelines USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 10);
+    ON guidelines USING hnsw (embedding vector_cosine_ops);
 
 CREATE INDEX IF NOT EXISTS idx_guidelines_category
     ON guidelines (category);
