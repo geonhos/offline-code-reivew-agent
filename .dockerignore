@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+.env
+.ruff_cache/
+.pytest_cache/
+.git/
+blog/
+tests/
+PLAN.md
+Modelfile

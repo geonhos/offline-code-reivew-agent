@@ -1,19 +1,35 @@
 """FastAPI 웹훅 서버 - GitLab MR 이벤트를 수신하고 AI 리뷰를 실행한다."""
 
 import logging
+import os
+from contextlib import asynccontextmanager
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 
 from src.config import settings
 from src.gitlab_client import GitLabClient
+from src.logging_config import setup_logging
 from src.reviewer import Reviewer
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """서버 시작 시 로깅 설정을 초기화한다."""
+    json_log = os.environ.get("REVIEW_LOG_FORMAT", "text") == "json"
+    log_level = os.environ.get("REVIEW_LOG_LEVEL", "INFO")
+    setup_logging(level=log_level, json_format=json_log)
+    logger.info("AI Code Review Agent 시작 (model=%s)", settings.llm_model)
+    yield
+    logger.info("AI Code Review Agent 종료")
+
 
 app = FastAPI(
     title="AI Code Review Agent",
     description="폐쇄망 환경 AI 코드 리뷰 봇",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 

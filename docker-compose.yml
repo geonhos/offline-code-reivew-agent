@@ -15,5 +15,32 @@ services:
       timeout: 3s
       retries: 5
 
+  review-service:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Ollama (호스트에서 실행 — GPU 접근 + 모델 캐시 재활용)
+      REVIEW_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      REVIEW_LLM_MODEL: qwen2.5-coder:7b
+      REVIEW_EMBED_MODEL: nomic-embed-text
+
+      # PostgreSQL
+      REVIEW_DB_HOST: postgres
+      REVIEW_DB_PORT: 5432
+      REVIEW_DB_USER: reviewer
+      REVIEW_DB_PASSWORD: reviewer
+      REVIEW_DB_NAME: review_db
+
+      # GitLab (docker-compose 실행 시 .env 또는 환경 변수로 오버라이드)
+      REVIEW_GITLAB_URL: ${REVIEW_GITLAB_URL:-https://gitlab.example.com}
+      REVIEW_GITLAB_TOKEN: ${REVIEW_GITLAB_TOKEN:-}
+      REVIEW_WEBHOOK_SECRET: ${REVIEW_WEBHOOK_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   pgdata:
