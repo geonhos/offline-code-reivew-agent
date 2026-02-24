@@ -1,0 +1,654 @@
+diff --git a/order-domain/src/main/java/com/example/order/domain/Order.java b/order-domain/src/main/java/com/example/order/domain/Order.java
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/order-domain/src/main/java/com/example/order/domain/Order.java
+@@ -0,0 +1,78 @@
++package com.example.order.domain;
++
++import jakarta.persistence.*;
++import lombok.AccessLevel;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++import java.util.ArrayList;
++import java.util.List;
++
++@Entity
++@Table(name = "orders")
++@Getter
++@NoArgsConstructor(access = AccessLevel.PROTECTED)
++public class Order {
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @Column(nullable = false)
++    private Long memberId;
++
++    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
++    private List<OrderItem> orderItems = new ArrayList<>();
++
++    @Enumerated(EnumType.STRING)
++    @Column(nullable = false)
++    private OrderStatus status;
++
++    private String shippingAddress;
++
++    private String receiverPhone;
++
++    private BigDecimal totalAmount;
++
++    private LocalDateTime orderedAt;
++
++    private LocalDateTime cancelledAt;
++
++    public static Order create(Long memberId, String address, String phone, List<OrderItem> items) {
++        Order order = new Order();
++        order.memberId = memberId;
++        order.shippingAddress = address;
++        order.receiverPhone = phone;
++        order.status = OrderStatus.ORDERED;
++        order.orderedAt = LocalDateTime.now();
++
++        for (OrderItem item : items) {
++            order.addItem(item);
++        }
++
++        order.totalAmount = order.calculateTotal();
++        return order;
++    }
++
++    public void addItem(OrderItem item) {
++        orderItems.add(item);
++        item.setOrder(this);
++    }
++
++    public BigDecimal calculateTotal() {
++        BigDecimal total = BigDecimal.ZERO;
++        for (OrderItem item : orderItems) {
++            total = total.add(item.getPrice().multiply(new BigDecimal(item.getQuantity())));
++        }
++        return total;
++    }
++
++    public void cancel() {
++        this.status = OrderStatus.CANCELLED;
++        this.cancelledAt = LocalDateTime.now();
++    }
++
++    public void complete() {
++        this.status = OrderStatus.COMPLETED;
++    }
++}
+diff --git a/order-domain/src/main/java/com/example/order/domain/OrderItem.java b/order-domain/src/main/java/com/example/order/domain/OrderItem.java
+new file mode 100644
+index 0000000..2345678
+--- /dev/null
++++ b/order-domain/src/main/java/com/example/order/domain/OrderItem.java
+@@ -0,0 +1,44 @@
++package com.example.order.domain;
++
++import jakarta.persistence.*;
++import lombok.AccessLevel;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++import lombok.Setter;
++
++import java.math.BigDecimal;
++
++@Entity
++@Table(name = "order_items")
++@Getter
++@NoArgsConstructor(access = AccessLevel.PROTECTED)
++public class OrderItem {
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @ManyToOne(fetch = FetchType.LAZY)
++    @JoinColumn(name = "order_id")
++    @Setter(AccessLevel.PACKAGE)
++    private Order order;
++
++    @Column(nullable = false)
++    private Long productId;
++
++    @Column(nullable = false)
++    private String productName;
++
++    private BigDecimal price;
++
++    private int quantity;
++
++    public static OrderItem create(Long productId, String productName, BigDecimal price, int quantity) {
++        OrderItem item = new OrderItem();
++        item.productId = productId;
++        item.productName = productName;
++        item.price = price;
++        item.quantity = quantity;
++        return item;
++    }
++}
+diff --git a/order-domain/src/main/java/com/example/order/domain/OrderStatus.java b/order-domain/src/main/java/com/example/order/domain/OrderStatus.java
+new file mode 100644
+index 0000000..3456789
+--- /dev/null
++++ b/order-domain/src/main/java/com/example/order/domain/OrderStatus.java
+@@ -0,0 +1,5 @@
++package com.example.order.domain;
++
++public enum OrderStatus {
++    ORDERED, PAID, SHIPPING, COMPLETED, CANCELLED
++}
+diff --git a/order-domain/src/main/java/com/example/order/domain/OrderRepository.java b/order-domain/src/main/java/com/example/order/domain/OrderRepository.java
+new file mode 100644
+index 0000000..4567890
+--- /dev/null
++++ b/order-domain/src/main/java/com/example/order/domain/OrderRepository.java
+@@ -0,0 +1,14 @@
++package com.example.order.domain;
++
++import java.util.List;
++import java.util.Optional;
++
++public interface OrderRepository {
++    Order save(Order order);
++    Optional<Order> findById(Long id);
++    List<Order> findByMemberId(Long memberId);
++    List<Order> findAll();
++    void delete(Order order);
++    List<Order> findByStatus(OrderStatus status);
++    long count();
++}
+diff --git a/order-application/src/main/java/com/example/order/application/OrderService.java b/order-application/src/main/java/com/example/order/application/OrderService.java
+new file mode 100644
+index 0000000..5678901
+--- /dev/null
++++ b/order-application/src/main/java/com/example/order/application/OrderService.java
+@@ -0,0 +1,107 @@
++package com.example.order.application;
++
++import com.example.order.domain.*;
++import lombok.RequiredArgsConstructor;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.math.BigDecimal;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.stream.Collectors;
++
++@Service
++@RequiredArgsConstructor
++public class OrderService {
++
++    private final OrderRepository orderRepository;
++    private final MemberClient memberClient;
++    private final ProductClient productClient;
++    private final PaymentClient paymentClient;
++
++    @Transactional
++    public Long createOrder(CreateOrderCommand command) {
++        // 회원 존재 여부 확인
++        MemberDto member = memberClient.getMember(command.getMemberId());
++        if (member == null) {
++            throw new RuntimeException("회원을 찾을 수 없습니다: " + command.getMemberId());
++        }
++
++        // 상품 재고 확인 및 주문 항목 생성
++        List<OrderItem> items = new ArrayList<>();
++        for (CreateOrderCommand.OrderItemRequest req : command.getItems()) {
++            ProductDto product = productClient.getProduct(req.getProductId());
++
++            if (product.getStock() < req.getQuantity()) {
++                throw new RuntimeException("재고 부족: " + product.getName());
++            }
++
++            OrderItem item = OrderItem.create(
++                product.getId(), product.getName(), product.getPrice(), req.getQuantity()
++            );
++            items.add(item);
++        }
++
++        // 주문 생성
++        Order order = Order.create(
++            command.getMemberId(), command.getAddress(), command.getPhone(), items
++        );
++        orderRepository.save(order);
++
++        // 재고 차감
++        for (CreateOrderCommand.OrderItemRequest req : command.getItems()) {
++            productClient.decreaseStock(req.getProductId(), req.getQuantity());
++        }
++
++        return order.getId();
++    }
++
++    @Transactional
++    public void cancelOrder(Long orderId) {
++        Order order = orderRepository.findById(orderId)
++            .orElseThrow(() -> new RuntimeException("주문을 찾을 수 없습니다: " + orderId));
++
++        order.cancel();
++
++        // 재고 복구
++        for (OrderItem item : order.getOrderItems()) {
++            productClient.increaseStock(item.getProductId(), item.getQuantity());
++        }
++
++        // 결제 취소
++        paymentClient.cancelPayment(orderId);
++    }
++
++    @Transactional(readOnly = true)
++    public OrderDetailDto getOrder(Long orderId) {
++        Order order = orderRepository.findById(orderId)
++            .orElseThrow(() -> new RuntimeException("주문을 찾을 수 없습니다: " + orderId));
++
++        return toDetailDto(order);
++    }
++
++    @Transactional(readOnly = true)
++    public List<OrderDetailDto> getMyOrders(Long memberId) {
++        List<Order> orders = orderRepository.findByMemberId(memberId);
++        List<OrderDetailDto> result = new ArrayList<>();
++        for (Order order : orders) {
++            result.add(toDetailDto(order));
++        }
++        return result;
++    }
++
++    @Transactional(readOnly = true)
++    public Map<String, Object> getOrderStatistics() {
++        List<Order> allOrders = orderRepository.findAll();
++
++        Map<String, Object> stats = new HashMap<>();
++        stats.put("totalOrders", allOrders.size());
++        stats.put("totalRevenue", allOrders.stream()
++            .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
++            .map(Order::getTotalAmount)
++            .reduce(BigDecimal.ZERO, BigDecimal::add));
++        stats.put("cancelRate",
++            (double) allOrders.stream().filter(o -> o.getStatus() == OrderStatus.CANCELLED).count()
++            / allOrders.size() * 100);
++
++        return stats;
++    }
++
++    private OrderDetailDto toDetailDto(Order order) {
++        OrderDetailDto dto = new OrderDetailDto();
++        dto.setId(order.getId());
++        dto.setStatus(order.getStatus().name());
++        dto.setTotalAmount(order.getTotalAmount());
++        dto.setOrderedAt(order.getOrderedAt());
++        return dto;
++    }
++}
+diff --git a/order-application/src/main/java/com/example/order/application/CreateOrderCommand.java b/order-application/src/main/java/com/example/order/application/CreateOrderCommand.java
+new file mode 100644
+index 0000000..6789012
+--- /dev/null
++++ b/order-application/src/main/java/com/example/order/application/CreateOrderCommand.java
+@@ -0,0 +1,27 @@
++package com.example.order.application;
++
++import lombok.Data;
++
++import java.util.List;
++
++@Data
++public class CreateOrderCommand {
++
++    private Long memberId;
++    private String address;
++    private String phone;
++    private List<OrderItemRequest> items;
++
++    @Data
++    public static class OrderItemRequest {
++        private Long productId;
++        private int quantity;
++    }
++
++    public CreateOrderCommand(Long memberId, String address, String phone, List<OrderItemRequest> items) {
++        this.memberId = memberId;
++        this.address = address;
++        this.phone = phone;
++        this.items = items;
++    }
++}
+diff --git a/order-application/src/main/java/com/example/order/application/OrderDetailDto.java b/order-application/src/main/java/com/example/order/application/OrderDetailDto.java
+new file mode 100644
+index 0000000..7890123
+--- /dev/null
++++ b/order-application/src/main/java/com/example/order/application/OrderDetailDto.java
+@@ -0,0 +1,18 @@
++package com.example.order.application;
++
++import lombok.Data;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++@Data
++public class OrderDetailDto {
++    private Long id;
++    private String status;
++    private BigDecimal totalAmount;
++    private LocalDateTime orderedAt;
++    private String address;
++    private String phone;
++    private String memberName;
++    private List<OrderItemDto> items;
++}
+diff --git a/order-infrastructure/src/main/java/com/example/order/infrastructure/persistence/JpaOrderRepository.java b/order-infrastructure/src/main/java/com/example/order/infrastructure/persistence/JpaOrderRepository.java
+new file mode 100644
+index 0000000..8901234
+--- /dev/null
++++ b/order-infrastructure/src/main/java/com/example/order/infrastructure/persistence/JpaOrderRepository.java
+@@ -0,0 +1,59 @@
++package com.example.order.infrastructure.persistence;
++
++import com.example.order.domain.Order;
++import com.example.order.domain.OrderRepository;
++import com.example.order.domain.OrderStatus;
++import jakarta.persistence.EntityManager;
++import jakarta.persistence.PersistenceContext;
++import org.springframework.stereotype.Repository;
++
++import java.util.List;
++import java.util.Optional;
++
++@Repository
++public class JpaOrderRepository implements OrderRepository {
++
++    @PersistenceContext
++    private EntityManager em;
++
++    @Override
++    public Order save(Order order) {
++        if (order.getId() == null) {
++            em.persist(order);
++            return order;
++        }
++        return em.merge(order);
++    }
++
++    @Override
++    public Optional<Order> findById(Long id) {
++        return Optional.ofNullable(em.find(Order.class, id));
++    }
++
++    @Override
++    public List<Order> findByMemberId(Long memberId) {
++        return em.createQuery("SELECT o FROM Order o WHERE o.memberId = :memberId", Order.class)
++            .setParameter("memberId", memberId)
++            .getResultList();
++    }
++
++    @Override
++    public List<Order> findAll() {
++        return em.createQuery("SELECT o FROM Order o", Order.class)
++            .getResultList();
++    }
++
++    @Override
++    public void delete(Order order) {
++        em.remove(order);
++    }
++
++    @Override
++    public List<Order> findByStatus(OrderStatus status) {
++        return em.createQuery(
++                "SELECT o FROM Order o LEFT JOIN FETCH o.orderItems WHERE o.status = :status", Order.class)
++            .setParameter("status", status)
++            .getResultList();
++    }
++
++    @Override
++    public long count() {
++        return em.createQuery("SELECT COUNT(o) FROM Order o", Long.class)
++            .getSingleResult();
++    }
++}
+diff --git a/order-infrastructure/src/main/java/com/example/order/infrastructure/client/ProductClientImpl.java b/order-infrastructure/src/main/java/com/example/order/infrastructure/client/ProductClientImpl.java
+new file mode 100644
+index 0000000..9012345
+--- /dev/null
++++ b/order-infrastructure/src/main/java/com/example/order/infrastructure/client/ProductClientImpl.java
+@@ -0,0 +1,50 @@
++package com.example.order.infrastructure.client;
++
++import com.example.order.application.ProductClient;
++import com.example.order.application.ProductDto;
++import lombok.RequiredArgsConstructor;
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.stereotype.Component;
++import org.springframework.web.client.RestTemplate;
++
++@Component
++@RequiredArgsConstructor
++public class ProductClientImpl implements ProductClient {
++
++    private final RestTemplate restTemplate;
++
++    @Value("${service.product.url}")
++    private String productServiceUrl;
++
++    @Override
++    public ProductDto getProduct(Long productId) {
++        String url = productServiceUrl + "/api/products/" + productId;
++        try {
++            return restTemplate.getForObject(url, ProductDto.class);
++        } catch (Exception e) {
++            System.out.println("상품 조회 실패: " + e.getMessage());
++            return null;
++        }
++    }
++
++    @Override
++    public void decreaseStock(Long productId, int quantity) {
++        String url = productServiceUrl + "/api/products/" + productId + "/stock/decrease?quantity=" + quantity;
++        try {
++            restTemplate.put(url, null);
++        } catch (Exception e) {
++            System.out.println("재고 차감 실패: " + e.getMessage());
++            throw new RuntimeException("재고 차감 실패", e);
++        }
++    }
++
++    @Override
++    public void increaseStock(Long productId, int quantity) {
++        String url = productServiceUrl + "/api/products/" + productId + "/stock/increase?quantity=" + quantity;
++        try {
++            restTemplate.put(url, null);
++        } catch (Exception e) {
++            System.out.println("재고 복구 실패: " + e.getMessage());
++            throw new RuntimeException("재고 복구 실패", e);
++        }
++    }
++}
+diff --git a/order-api/src/main/java/com/example/order/api/OrderController.java b/order-api/src/main/java/com/example/order/api/OrderController.java
+new file mode 100644
+index 0000000..0123456
+--- /dev/null
++++ b/order-api/src/main/java/com/example/order/api/OrderController.java
+@@ -0,0 +1,72 @@
++package com.example.order.api;
++
++import com.example.order.application.CreateOrderCommand;
++import com.example.order.application.OrderDetailDto;
++import com.example.order.application.OrderService;
++import lombok.RequiredArgsConstructor;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++
++import java.util.List;
++import java.util.Map;
++
++@RestController
++@RequestMapping("/api/orders")
++@RequiredArgsConstructor
++public class OrderController {
++
++    private final OrderService orderService;
++
++    @PostMapping
++    public ResponseEntity<Map<String, Object>> createOrder(@RequestBody CreateOrderRequest request) {
++        CreateOrderCommand command = new CreateOrderCommand(
++            request.getMemberId(),
++            request.getAddress(),
++            request.getPhone(),
++            request.getItems().stream()
++                .map(i -> {
++                    CreateOrderCommand.OrderItemRequest req = new CreateOrderCommand.OrderItemRequest();
++                    req.setProductId(i.getProductId());
++                    req.setQuantity(i.getQuantity());
++                    return req;
++                })
++                .toList()
++        );
++
++        Long orderId = orderService.createOrder(command);
++
++        return ResponseEntity.ok(Map.of(
++            "orderId", orderId,
++            "message", "주문이 생성되었습니다."
++        ));
++    }
++
++    @DeleteMapping("/{orderId}")
++    public ResponseEntity<Void> cancelOrder(@PathVariable Long orderId) {
++        orderService.cancelOrder(orderId);
++        return ResponseEntity.noContent().build();
++    }
++
++    @GetMapping("/{orderId}")
++    public ResponseEntity<OrderDetailDto> getOrder(@PathVariable Long orderId) {
++        return ResponseEntity.ok(orderService.getOrder(orderId));
++    }
++
++    @GetMapping("/my")
++    public ResponseEntity<List<OrderDetailDto>> getMyOrders(@RequestParam Long memberId) {
++        return ResponseEntity.ok(orderService.getMyOrders(memberId));
++    }
++
++    @GetMapping("/statistics")
++    public ResponseEntity<Map<String, Object>> getStatistics() {
++        return ResponseEntity.ok(orderService.getOrderStatistics());
++    }
++}
+diff --git a/order-api/src/main/java/com/example/order/api/CreateOrderRequest.java b/order-api/src/main/java/com/example/order/api/CreateOrderRequest.java
+new file mode 100644
+index 0000000..1234568
+--- /dev/null
++++ b/order-api/src/main/java/com/example/order/api/CreateOrderRequest.java
+@@ -0,0 +1,24 @@
++package com.example.order.api;
++
++import lombok.Data;
++
++import java.util.List;
++
++@Data
++public class CreateOrderRequest {
++
++    private Long memberId;
++    private String address;
++    private String phone;
++    private List<OrderItemRequest> items;
++
++    @Data
++    public static class OrderItemRequest {
++        private Long productId;
++        private int quantity;
++    }
++}
+diff --git a/order-api/src/main/java/com/example/order/api/GlobalExceptionHandler.java b/order-api/src/main/java/com/example/order/api/GlobalExceptionHandler.java
+new file mode 100644
+index 0000000..2345679
+--- /dev/null
++++ b/order-api/src/main/java/com/example/order/api/GlobalExceptionHandler.java
+@@ -0,0 +1,28 @@
++package com.example.order.api;
++
++import org.springframework.http.HttpStatus;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.ExceptionHandler;
++import org.springframework.web.bind.annotation.RestControllerAdvice;
++
++import java.util.Map;
++
++@RestControllerAdvice
++public class GlobalExceptionHandler {
++
++    @ExceptionHandler(RuntimeException.class)
++    public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException e) {
++        return ResponseEntity
++            .status(HttpStatus.INTERNAL_SERVER_ERROR)
++            .body(Map.of("error", e.getMessage()));
++    }
++
++    @ExceptionHandler(Exception.class)
++    public ResponseEntity<Map<String, String>> handleException(Exception e) {
++        e.printStackTrace();
++        return ResponseEntity
++            .status(HttpStatus.INTERNAL_SERVER_ERROR)
++            .body(Map.of("error", "서버 내부 오류가 발생했습니다."));
++    }
++}
+diff --git a/order-infrastructure/src/main/java/com/example/order/infrastructure/config/RestTemplateConfig.java b/order-infrastructure/src/main/java/com/example/order/infrastructure/config/RestTemplateConfig.java
+new file mode 100644
+index 0000000..3456780
+--- /dev/null
++++ b/order-infrastructure/src/main/java/com/example/order/infrastructure/config/RestTemplateConfig.java
+@@ -0,0 +1,16 @@
++package com.example.order.infrastructure.config;
++
++import org.springframework.context.annotation.Bean;
++import org.springframework.context.annotation.Configuration;
++import org.springframework.web.client.RestTemplate;
++
++@Configuration
++public class RestTemplateConfig {
++
++    @Bean
++    public RestTemplate restTemplate() {
++        return new RestTemplate();
++    }
++}
+diff --git a/order-api/src/main/resources/application.yml b/order-api/src/main/resources/application.yml
+new file mode 100644
+index 0000000..4567891
+--- /dev/null
++++ b/order-api/src/main/resources/application.yml
+@@ -0,0 +1,23 @@
++spring:
++  datasource:
++    url: jdbc:mysql://localhost:3306/order_db
++    username: root
++    password: root1234
++    driver-class-name: com.mysql.cj.jdbc.Driver
++
++  jpa:
++    hibernate:
++      ddl-auto: update
++    show-sql: true
++    properties:
++      hibernate:
++        format_sql: true
++
++service:
++  product:
++    url: http://localhost:8081
++  member:
++    url: http://localhost:8082
++  payment:
++    url: http://localhost:8083
