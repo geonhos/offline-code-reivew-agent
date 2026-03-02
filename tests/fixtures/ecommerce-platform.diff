@@ -1,0 +1,1223 @@
+diff --git a/user-service/src/main/java/com/example/userservice/controller/UserController.java b/user-service/src/main/java/com/example/userservice/controller/UserController.java
+new file mode 100644
+index 0000000..a100001
+--- /dev/null
++++ b/user-service/src/main/java/com/example/userservice/controller/UserController.java
+@@ -0,0 +1,44 @@
++package com.example.userservice.controller;
++
++import com.example.userservice.dto.LoginRequest;
++import com.example.userservice.dto.UserRegisterRequest;
++import com.example.userservice.service.AuthService;
++import lombok.RequiredArgsConstructor;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++
++import java.util.Map;
++
++@RestController
++@RequestMapping("/api/users")
++@RequiredArgsConstructor
++public class UserController {
++
++    private final AuthService authService;
++
++    @PostMapping("/register")
++    public ResponseEntity<?> register(@RequestBody UserRegisterRequest request) {
++        // 이메일 형식 검증 없이 바로 저장
++        authService.register(request.getEmail(), request.getPassword(), request.getName());
++        return ResponseEntity.ok(Map.of("message", "회원가입이 완료되었습니다."));
++    }
++
++    @PostMapping("/login")
++    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
++        String token = authService.login(request.getEmail(), request.getPassword());
++        return ResponseEntity.ok(Map.of("token", token));
++    }
++
++    @GetMapping("/profile")
++    public ResponseEntity<?> getProfile(@RequestHeader("Authorization") String token) {
++        return ResponseEntity.ok(authService.getProfile(token));
++    }
++
++    @PutMapping("/profile")
++    public ResponseEntity<?> updateProfile(
++            @RequestHeader("Authorization") String token,
++            @RequestBody Map<String, String> updates) {
++        // 이메일 변경 시에도 형식 검증 없음
++        authService.updateProfile(token, updates.get("email"), updates.get("name"));
++        return ResponseEntity.ok(Map.of("message", "프로필이 수정되었습니다."));
++    }
++}
+diff --git a/user-service/src/main/java/com/example/userservice/service/AuthService.java b/user-service/src/main/java/com/example/userservice/service/AuthService.java
+new file mode 100644
+index 0000000..a100002
+--- /dev/null
++++ b/user-service/src/main/java/com/example/userservice/service/AuthService.java
+@@ -0,0 +1,65 @@
++package com.example.userservice.service;
++
++import com.example.userservice.domain.User;
++import com.example.userservice.repository.UserRepository;
++import com.example.userservice.security.JwtTokenProvider;
++import lombok.RequiredArgsConstructor;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.security.MessageDigest;
++
++@Service
++@RequiredArgsConstructor
++public class AuthService {
++
++    private final UserRepository userRepository;
++    private final JwtTokenProvider jwtTokenProvider;
++
++    @Transactional
++    public void register(String email, String password, String name) {
++        if (userRepository.findByEmail(email).isPresent()) {
++            throw new RuntimeException("이미 등록된 이메일입니다: " + email);
++        }
++
++        String hashedPassword = hashWithMD5(password);
++        User user = new User(email, hashedPassword, name);
++        userRepository.save(user);
++    }
++
++    public String login(String email, String password) {
++        User user = userRepository.findByEmail(email)
++            .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다: " + email));
++
++        String hashedPassword = hashWithMD5(password);
++        if (!user.getPassword().equals(hashedPassword)) {
++            throw new RuntimeException("비밀번호가 일치하지 않습니다.");
++        }
++
++        return jwtTokenProvider.createToken(user.getId(), user.getEmail());
++    }
++
++    public User getProfile(String token) {
++        Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
++        return userRepository.findById(userId)
++            .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
++    }
++
++    @Transactional
++    public void updateProfile(String token, String email, String name) {
++        Long userId = jwtTokenProvider.getUserIdFromToken(token.replace("Bearer ", ""));
++        User user = userRepository.findById(userId)
++            .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
++        user.updateProfile(email, name);
++    }
++
++    private String hashWithMD5(String input) {
++        try {
++            MessageDigest md = MessageDigest.getInstance("MD5");
++            byte[] digest = md.digest(input.getBytes());
++            StringBuilder sb = new StringBuilder();
++            for (byte b : digest) {
++                sb.append(String.format("%02x", b));
++            }
++            return sb.toString();
++        } catch (Exception e) {
++            throw new RuntimeException("해싱 실패", e);
++        }
++    }
++}
+diff --git a/user-service/src/main/java/com/example/userservice/security/JwtTokenProvider.java b/user-service/src/main/java/com/example/userservice/security/JwtTokenProvider.java
+new file mode 100644
+index 0000000..a100003
+--- /dev/null
++++ b/user-service/src/main/java/com/example/userservice/security/JwtTokenProvider.java
+@@ -0,0 +1,46 @@
++package com.example.userservice.security;
++
++import io.jsonwebtoken.*;
++import org.springframework.stereotype.Component;
++
++import java.util.Date;
++
++@Component
++public class JwtTokenProvider {
++
++    private static final String SECRET_KEY = "myJwtSecretKey123456789!@#$%";
++    private static final long EXPIRATION_MS = 3600000;
++
++    public String createToken(Long userId, String email) {
++        Date now = new Date();
++        Date expiry = new Date(now.getTime() + EXPIRATION_MS);
++
++        return Jwts.builder()
++            .setSubject(String.valueOf(userId))
++            .claim("email", email)
++            .setIssuedAt(now)
++            .setExpiration(expiry)
++            .signWith(SignatureAlgorithm.HS256, SECRET_KEY)
++            .compact();
++    }
++
++    public Long getUserIdFromToken(String token) {
++        Claims claims = Jwts.parser()
++            .setSigningKey(SECRET_KEY)
++            .parseClaimsJws(token)
++            .getBody();
++        return Long.parseLong(claims.getSubject());
++    }
++
++    public boolean validateToken(String token) {
++        try {
++            Jwts.parser().setSigningKey(SECRET_KEY).parseClaimsJws(token);
++            return true;
++        } catch (JwtException e) {
++            return false;
++        }
++    }
++}
+diff --git a/user-service/src/main/java/com/example/userservice/config/SecurityConfig.java b/user-service/src/main/java/com/example/userservice/config/SecurityConfig.java
+new file mode 100644
+index 0000000..a100004
+--- /dev/null
++++ b/user-service/src/main/java/com/example/userservice/config/SecurityConfig.java
+@@ -0,0 +1,38 @@
++package com.example.userservice.config;
++
++import org.springframework.context.annotation.Bean;
++import org.springframework.context.annotation.Configuration;
++import org.springframework.security.config.annotation.web.builders.HttpSecurity;
++import org.springframework.security.web.SecurityFilterChain;
++import org.springframework.web.cors.CorsConfiguration;
++import org.springframework.web.cors.CorsConfigurationSource;
++import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
++
++import java.util.List;
++
++@Configuration
++public class SecurityConfig {
++
++    @Bean
++    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
++        http
++            .cors().and()
++            .csrf().disable()
++            .authorizeHttpRequests(auth -> auth
++                .requestMatchers("/api/users/register", "/api/users/login").permitAll()
++                .anyRequest().authenticated()
++            );
++        return http.build();
++    }
++
++    @Bean
++    public CorsConfigurationSource corsConfigurationSource() {
++        CorsConfiguration config = new CorsConfiguration();
++        config.setAllowedOrigins(List.of("*"));
++        config.setAllowedMethods(List.of("*"));
++        config.setAllowedHeaders(List.of("*"));
++        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
++        source.registerCorsConfiguration("/**", config);
++        return source;
++    }
++}
+diff --git a/user-service/src/main/java/com/example/userservice/repository/UserRepository.java b/user-service/src/main/java/com/example/userservice/repository/UserRepository.java
+new file mode 100644
+index 0000000..a100005
+--- /dev/null
++++ b/user-service/src/main/java/com/example/userservice/repository/UserRepository.java
+@@ -0,0 +1,12 @@
++package com.example.userservice.repository;
++
++import com.example.userservice.domain.User;
++import org.springframework.data.jpa.repository.JpaRepository;
++
++import java.util.Optional;
++
++public interface UserRepository extends JpaRepository<User, Long> {
++
++    Optional<User> findByEmail(String email);
++    boolean existsByEmail(String email);
++}
+diff --git a/user-service/src/main/resources/application.yml b/user-service/src/main/resources/application.yml
+new file mode 100644
+index 0000000..a100006
+--- /dev/null
++++ b/user-service/src/main/resources/application.yml
+@@ -0,0 +1,18 @@
++server:
++  port: 8080
++
++spring:
++  datasource:
++    url: jdbc:mysql://localhost:3306/user_db
++    username: root
++    password: root1234
++    driver-class-name: com.mysql.cj.jdbc.Driver
++
++  jpa:
++    hibernate:
++      ddl-auto: update
++    show-sql: true
++
++jwt:
++  secret: myJwtSecretKey123456789
++  expiration: 3600000
+diff --git a/product-service/src/main/java/com/example/productservice/controller/ProductController.java b/product-service/src/main/java/com/example/productservice/controller/ProductController.java
+new file mode 100644
+index 0000000..b100001
+--- /dev/null
++++ b/product-service/src/main/java/com/example/productservice/controller/ProductController.java
+@@ -0,0 +1,43 @@
++package com.example.productservice.controller;
++
++import com.example.productservice.dto.ProductCreateRequest;
++import com.example.productservice.service.ProductService;
++import com.example.productservice.service.ProductSearchService;
++import lombok.RequiredArgsConstructor;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++
++import java.util.List;
++import java.util.Map;
++
++@RestController
++@RequestMapping("/api/products")
++@RequiredArgsConstructor
++public class ProductController {
++
++    private final ProductService productService;
++    private final ProductSearchService searchService;
++
++    @PostMapping
++    public ResponseEntity<?> createProduct(@RequestBody ProductCreateRequest request) {
++        // 가격 음수 검증 없음 — request.getPrice()가 음수여도 통과
++        Long productId = productService.createProduct(
++            request.getName(), request.getPrice(), request.getStock()
++        );
++        return ResponseEntity.ok(Map.of("productId", productId));
++    }
++
++    @GetMapping("/{id}")
++    public ResponseEntity<?> getProduct(@PathVariable Long id) {
++        return ResponseEntity.ok(productService.getProduct(id));
++    }
++
++    @GetMapping("/search")
++    public ResponseEntity<?> searchProducts(
++            @RequestParam String keyword,
++            @RequestParam(required = false) String category) {
++        return ResponseEntity.ok(searchService.searchProducts(keyword, category));
++    }
++
++    @PutMapping("/{id}/stock/decrease")
++    public ResponseEntity<?> decreaseStock(@PathVariable Long id, @RequestParam int quantity) {
++        productService.decreaseStock(id, quantity);
++        return ResponseEntity.ok().build();
++    }
++}
+diff --git a/product-service/src/main/java/com/example/productservice/service/ProductService.java b/product-service/src/main/java/com/example/productservice/service/ProductService.java
+new file mode 100644
+index 0000000..b100002
+--- /dev/null
++++ b/product-service/src/main/java/com/example/productservice/service/ProductService.java
+@@ -0,0 +1,56 @@
++package com.example.productservice.service;
++
++import com.example.productservice.domain.Product;
++import com.example.productservice.dto.ProductDetailDto;
++import com.example.productservice.repository.ProductRepository;
++import com.example.productservice.repository.ReviewRepository;
++import lombok.RequiredArgsConstructor;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.math.BigDecimal;
++import java.util.ArrayList;
++import java.util.List;
++
++@Service
++@RequiredArgsConstructor
++public class ProductService {
++
++    private final ProductRepository productRepository;
++    private final ReviewRepository reviewRepository;
++
++    @Transactional
++    public Long createProduct(String name, BigDecimal price, int stock) {
++        Product product = new Product(name, price, stock);
++        productRepository.save(product);
++        return product.getId();
++    }
++
++    @Transactional(readOnly = true)
++    public Product getProduct(Long id) {
++        return productRepository.findById(id)
++            .orElseThrow(() -> new RuntimeException("상품을 찾을 수 없습니다: " + id));
++    }
++
++    @Transactional(readOnly = true)
++    public List<ProductDetailDto> getProductsWithReviews(List<Long> productIds) {
++        // N+1 쿼리: 상품마다 리뷰를 개별 조회
++        List<ProductDetailDto> result = new ArrayList<>();
++        for (Long id : productIds) {
++            Product product = productRepository.findById(id).orElse(null);
++            if (product != null) {
++                var reviews = reviewRepository.findByProductId(id);
++                result.add(new ProductDetailDto(product, reviews));
++            }
++        }
++        return result;
++    }
++
++    @Transactional
++    public void decreaseStock(Long productId, int quantity) {
++        Product product = productRepository.findById(productId)
++            .orElseThrow(() -> new RuntimeException("상품을 찾을 수 없습니다: " + productId));
++        if (product.getStock() < quantity) {
++            throw new RuntimeException("재고가 부족합니다: " + product.getName());
++        }
++        product.decreaseStock(quantity);
++    }
++}
+diff --git a/product-service/src/main/java/com/example/productservice/service/ProductSearchService.java b/product-service/src/main/java/com/example/productservice/service/ProductSearchService.java
+new file mode 100644
+index 0000000..b100003
+--- /dev/null
++++ b/product-service/src/main/java/com/example/productservice/service/ProductSearchService.java
+@@ -0,0 +1,31 @@
++package com.example.productservice.service;
++
++import com.example.productservice.domain.Product;
++import jakarta.persistence.EntityManager;
++import lombok.RequiredArgsConstructor;
++import org.springframework.stereotype.Service;
++
++import java.util.List;
++
++@Service
++@RequiredArgsConstructor
++public class ProductSearchService {
++
++    private final EntityManager entityManager;
++
++    public List<Product> searchProducts(String keyword, String category) {
++        System.out.println("상품 검색: keyword=" + keyword + ", category=" + category);
++
++        // SQL Injection 취약점: 사용자 입력을 직접 쿼리에 연결
++        String jpql = "SELECT p FROM Product p WHERE p.name LIKE '%" + keyword + "%'";
++
++        if (category != null && !category.isEmpty()) {
++            jpql += " AND p.category = '" + category + "'";
++        }
++
++        // 페이지네이션 없이 전체 결과 반환
++        return entityManager.createQuery(jpql, Product.class)
++            .getResultList();
++    }
++}
+diff --git a/product-service/src/main/java/com/example/productservice/domain/Product.java b/product-service/src/main/java/com/example/productservice/domain/Product.java
+new file mode 100644
+index 0000000..b100004
+--- /dev/null
++++ b/product-service/src/main/java/com/example/productservice/domain/Product.java
+@@ -0,0 +1,42 @@
++package com.example.productservice.domain;
++
++import jakarta.persistence.*;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++
++import java.math.BigDecimal;
++
++@Entity
++@Table(name = "products")
++@Getter
++@NoArgsConstructor
++public class Product {
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @Column(nullable = false)
++    private String name;
++
++    private String category;
++
++    @Column(nullable = false)
++    private BigDecimal price;
++
++    @Column(nullable = false)
++    private int stock;
++
++    public Product(String name, BigDecimal price, int stock) {
++        this.name = name;
++        this.price = price;
++        this.stock = stock;
++    }
++
++    public void decreaseStock(int quantity) {
++        if (this.stock < quantity) {
++            throw new RuntimeException("재고가 부족합니다.");
++        }
++        this.stock -= quantity;
++    }
++}
+diff --git a/product-service/src/main/java/com/example/productservice/repository/ProductRepository.java b/product-service/src/main/java/com/example/productservice/repository/ProductRepository.java
+new file mode 100644
+index 0000000..b100005
+--- /dev/null
++++ b/product-service/src/main/java/com/example/productservice/repository/ProductRepository.java
+@@ -0,0 +1,13 @@
++package com.example.productservice.repository;
++
++import com.example.productservice.domain.Product;
++import org.springframework.data.jpa.repository.JpaRepository;
++
++import java.util.List;
++
++public interface ProductRepository extends JpaRepository<Product, Long> {
++
++    List<Product> findByCategory(String category);
++    List<Product> findByNameContaining(String keyword);
++}
+diff --git a/product-service/src/main/resources/application.yml b/product-service/src/main/resources/application.yml
+new file mode 100644
+index 0000000..b100006
+--- /dev/null
++++ b/product-service/src/main/resources/application.yml
+@@ -0,0 +1,14 @@
++server:
++  port: 8081
++
++spring:
++  datasource:
++    url: jdbc:mysql://localhost:3306/product_db
++    username: root
++    password: product_pass123
++    driver-class-name: com.mysql.cj.jdbc.Driver
++
++  jpa:
++    hibernate:
++      ddl-auto: update
++    show-sql: true
+diff --git a/order-service/src/main/java/com/example/orderservice/controller/OrderController.java b/order-service/src/main/java/com/example/orderservice/controller/OrderController.java
+new file mode 100644
+index 0000000..c100001
+--- /dev/null
++++ b/order-service/src/main/java/com/example/orderservice/controller/OrderController.java
+@@ -0,0 +1,50 @@
++package com.example.orderservice.controller;
++
++import com.example.orderservice.dto.CreateOrderRequest;
++import com.example.orderservice.service.OrderService;
++import lombok.RequiredArgsConstructor;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++
++import java.util.Map;
++
++@RestController
++@RequestMapping("/api/orders")
++@RequiredArgsConstructor
++public class OrderController {
++
++    private final OrderService orderService;
++
++    @PostMapping
++    public ResponseEntity<?> createOrder(@RequestBody CreateOrderRequest request) {
++        // @Valid 누락 — 입력 검증 없이 서비스로 전달
++        Long orderId = orderService.createOrder(request);
++        return ResponseEntity.ok(Map.of("orderId", orderId, "message", "주문이 생성되었습니다."));
++    }
++
++    @DeleteMapping("/{orderId}")
++    public ResponseEntity<?> cancelOrder(@PathVariable Long orderId) {
++        orderService.cancelOrder(orderId);
++        return ResponseEntity.noContent().build();
++    }
++
++    @GetMapping("/{orderId}")
++    public ResponseEntity<?> getOrder(@PathVariable Long orderId) {
++        return ResponseEntity.ok(orderService.getOrder(orderId));
++    }
++
++    @GetMapping("/statistics")
++    public ResponseEntity<?> getStatistics() {
++        return ResponseEntity.ok(orderService.getOrderStatistics());
++    }
++
++    // 에러 메시지를 클라이언트에 그대로 노출
++    @ExceptionHandler(RuntimeException.class)
++    public ResponseEntity<?> handleRuntimeException(RuntimeException e) {
++        return ResponseEntity.status(500)
++            .body(Map.of("error", e.getMessage()));
++    }
++
++    @ExceptionHandler(Exception.class)
++    public ResponseEntity<?> handleException(Exception e) {
++        return ResponseEntity.status(500)
++            .body(Map.of("error", "내부 오류: " + e.getMessage()));
++    }
++}
+diff --git a/order-service/src/main/java/com/example/orderservice/service/OrderService.java b/order-service/src/main/java/com/example/orderservice/service/OrderService.java
+new file mode 100644
+index 0000000..c100002
+--- /dev/null
++++ b/order-service/src/main/java/com/example/orderservice/service/OrderService.java
+@@ -0,0 +1,72 @@
++package com.example.orderservice.service;
++
++import com.example.orderservice.client.PaymentClient;
++import com.example.orderservice.client.ProductClient;
++import com.example.orderservice.domain.Order;
++import com.example.orderservice.domain.OrderRepository;
++import com.example.orderservice.domain.OrderStatus;
++import com.example.orderservice.dto.CreateOrderRequest;
++import lombok.RequiredArgsConstructor;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.math.BigDecimal;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++
++@Service
++@RequiredArgsConstructor
++public class OrderService {
++
++    private final OrderRepository orderRepository;
++    private final ProductClient productClient;
++    private final PaymentClient paymentClient;
++
++    // 분산 트랜잭션 미보장: 재고 차감 + 결제를 하나의 로컬 트랜잭션에서 처리
++    @Transactional
++    public Long createOrder(CreateOrderRequest request) {
++        Order order = Order.create(request.getUserId(), request.getAddress());
++
++        for (var item : request.getItems()) {
++            // 외부 서비스 호출이 트랜잭션 내에 있음
++            productClient.decreaseStock(item.getProductId(), item.getQuantity());
++            order.addItem(item.getProductId(), item.getProductName(),
++                item.getPrice(), item.getQuantity());
++        }
++
++        orderRepository.save(order);
++
++        // 결제도 트랜잭션 내 외부 호출
++        paymentClient.requestPayment(order.getId(), order.getTotalAmount());
++
++        return order.getId();
++    }
++
++    @Transactional
++    public void cancelOrder(Long orderId) {
++        Order order = orderRepository.findById(orderId)
++            .orElseThrow(() -> new RuntimeException("주문을 찾을 수 없습니다: " + orderId));
++        order.cancel();
++    }
++
++    @Transactional(readOnly = true)
++    public Order getOrder(Long orderId) {
++        return orderRepository.findById(orderId)
++            .orElseThrow(() -> new RuntimeException("주문을 찾을 수 없습니다: " + orderId));
++    }
++
++    // findAll() 후 메모리에서 필터링/집계
++    @Transactional(readOnly = true)
++    public Map<String, Object> getOrderStatistics() {
++        List<Order> allOrders = orderRepository.findAll();
++
++        Map<String, Object> stats = new HashMap<>();
++        stats.put("totalOrders", allOrders.size());
++        stats.put("totalRevenue", allOrders.stream()
++            .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
++            .map(Order::getTotalAmount)
++            .reduce(BigDecimal.ZERO, BigDecimal::add));
++        stats.put("cancelledCount", allOrders.stream()
++            .filter(o -> o.getStatus() == OrderStatus.CANCELLED)
++            .count());
++
++        return stats;
++    }
++}
+diff --git a/order-service/src/main/java/com/example/orderservice/domain/Order.java b/order-service/src/main/java/com/example/orderservice/domain/Order.java
+new file mode 100644
+index 0000000..c100003
+--- /dev/null
++++ b/order-service/src/main/java/com/example/orderservice/domain/Order.java
+@@ -0,0 +1,60 @@
++package com.example.orderservice.domain;
++
++import jakarta.persistence.*;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++import java.util.ArrayList;
++import java.util.List;
++
++@Entity
++@Table(name = "orders")
++@Getter
++@NoArgsConstructor
++public class Order {
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @Column(nullable = false)
++    private Long userId;
++
++    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
++    private List<OrderItem> items = new ArrayList<>();
++
++    @Enumerated(EnumType.STRING)
++    private OrderStatus status;
++
++    private String address;
++
++    private BigDecimal totalAmount;
++
++    private LocalDateTime orderedAt;
++
++    private LocalDateTime cancelledAt;
++
++    // @Version 없음 — 동시 주문 시 재고 경합 가능
++
++    public static Order create(Long userId, String address) {
++        Order order = new Order();
++        order.userId = userId;
++        order.address = address;
++        order.status = OrderStatus.ORDERED;
++        order.orderedAt = LocalDateTime.now();
++        order.totalAmount = BigDecimal.ZERO;
++        return order;
++    }
++
++    public void addItem(Long productId, String name, BigDecimal price, int quantity) {
++        OrderItem item = OrderItem.create(productId, name, price, quantity);
++        items.add(item);
++        item.setOrder(this);
++        this.totalAmount = this.totalAmount.add(price.multiply(new BigDecimal(quantity)));
++    }
++
++    public void cancel() {
++        // 상태 검증 없이 바로 취소 — COMPLETED 상태에서도 취소 가능
++        this.status = OrderStatus.CANCELLED;
++        this.cancelledAt = LocalDateTime.now();
++    }
++}
+diff --git a/order-service/src/main/java/com/example/orderservice/domain/OrderItem.java b/order-service/src/main/java/com/example/orderservice/domain/OrderItem.java
+new file mode 100644
+index 0000000..c100004
+--- /dev/null
++++ b/order-service/src/main/java/com/example/orderservice/domain/OrderItem.java
+@@ -0,0 +1,36 @@
++package com.example.orderservice.domain;
++
++import jakarta.persistence.*;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++import lombok.Setter;
++
++import java.math.BigDecimal;
++
++@Entity
++@Table(name = "order_items")
++@Getter
++@NoArgsConstructor
++public class OrderItem {
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @ManyToOne(fetch = FetchType.LAZY)
++    @JoinColumn(name = "order_id")
++    @Setter
++    private Order order;
++
++    private Long productId;
++    private String productName;
++    private BigDecimal price;
++    private int quantity;
++
++    public static OrderItem create(Long productId, String name, BigDecimal price, int qty) {
++        OrderItem item = new OrderItem();
++        item.productId = productId;
++        item.productName = name;
++        item.price = price;
++        item.quantity = qty;
++        return item;
++    }
++}
+diff --git a/order-service/src/main/java/com/example/orderservice/repository/OrderRepository.java b/order-service/src/main/java/com/example/orderservice/repository/OrderRepository.java
+new file mode 100644
+index 0000000..c100005
+--- /dev/null
++++ b/order-service/src/main/java/com/example/orderservice/repository/OrderRepository.java
+@@ -0,0 +1,13 @@
++package com.example.orderservice.repository;
++
++import com.example.orderservice.domain.Order;
++import com.example.orderservice.domain.OrderStatus;
++import org.springframework.data.jpa.repository.JpaRepository;
++
++import java.util.List;
++
++public interface OrderRepository extends JpaRepository<Order, Long> {
++
++    List<Order> findByUserId(Long userId);
++    List<Order> findByStatus(OrderStatus status);
++}
+diff --git a/order-service/src/main/resources/application.yml b/order-service/src/main/resources/application.yml
+new file mode 100644
+index 0000000..c100006
+--- /dev/null
++++ b/order-service/src/main/resources/application.yml
+@@ -0,0 +1,18 @@
++server:
++  port: 8082
++
++spring:
++  datasource:
++    url: jdbc:mysql://localhost:3306/order_db
++    username: root
++    password: order_pass123
++    driver-class-name: com.mysql.cj.jdbc.Driver
++
++  jpa:
++    hibernate:
++      ddl-auto: update
++    show-sql: true
++
++service:
++  product-url: http://localhost:8081
++  payment-url: http://localhost:8083
+diff --git a/payment-service/src/main/java/com/example/paymentservice/controller/PaymentController.java b/payment-service/src/main/java/com/example/paymentservice/controller/PaymentController.java
+new file mode 100644
+index 0000000..d100001
+--- /dev/null
++++ b/payment-service/src/main/java/com/example/paymentservice/controller/PaymentController.java
+@@ -0,0 +1,40 @@
++package com.example.paymentservice.controller;
++
++import com.example.paymentservice.dto.PaymentRequest;
++import com.example.paymentservice.service.PaymentService;
++import lombok.RequiredArgsConstructor;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++
++import java.util.Map;
++
++@RestController
++@RequestMapping("/api/payments")
++@RequiredArgsConstructor
++public class PaymentController {
++
++    private final PaymentService paymentService;
++
++    // 멱등성 키 없음 — 네트워크 재시도 시 중복 결제 위험
++    @PostMapping
++    public ResponseEntity<?> processPayment(@RequestBody PaymentRequest request) {
++        Long paymentId = paymentService.processPayment(
++            request.getOrderId(),
++            request.getAmount(),
++            request.getCardNumber()
++        );
++        return ResponseEntity.ok(Map.of("paymentId", paymentId, "status", "SUCCESS"));
++    }
++
++    @PostMapping("/{paymentId}/cancel")
++    public ResponseEntity<?> cancelPayment(@PathVariable Long paymentId) {
++        paymentService.cancelPayment(paymentId);
++        return ResponseEntity.ok(Map.of("status", "CANCELLED"));
++    }
++
++    @GetMapping("/{paymentId}")
++    public ResponseEntity<?> getPayment(@PathVariable Long paymentId) {
++        return ResponseEntity.ok(paymentService.getPayment(paymentId));
++    }
++}
+diff --git a/payment-service/src/main/java/com/example/paymentservice/service/PaymentService.java b/payment-service/src/main/java/com/example/paymentservice/service/PaymentService.java
+new file mode 100644
+index 0000000..d100002
+--- /dev/null
++++ b/payment-service/src/main/java/com/example/paymentservice/service/PaymentService.java
+@@ -0,0 +1,53 @@
++package com.example.paymentservice.service;
++
++import com.example.paymentservice.client.PaymentGatewayClient;
++import com.example.paymentservice.domain.Payment;
++import com.example.paymentservice.domain.PaymentStatus;
++import com.example.paymentservice.repository.PaymentRepository;
++import lombok.RequiredArgsConstructor;
++import lombok.extern.slf4j.Slf4j;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.math.BigDecimal;
++
++@Slf4j
++@Service
++@RequiredArgsConstructor
++public class PaymentService {
++
++    private final PaymentRepository paymentRepository;
++    private final PaymentGatewayClient gatewayClient;
++
++    @Transactional
++    public Long processPayment(Long orderId, BigDecimal amount, String cardNumber) {
++        // 신용카드 번호를 로그에 그대로 출력
++        log.info("결제 처리 시작: orderId={}, amount={}, cardNumber={}", orderId, amount, cardNumber);
++
++        Payment payment = new Payment(orderId, amount, cardNumber);
++        paymentRepository.save(payment);
++
++        try {
++            gatewayClient.charge(cardNumber, amount);
++            payment.setStatus(PaymentStatus.COMPLETED);
++            log.info("결제 완료: paymentId={}, cardNumber={}", payment.getId(), cardNumber);
++        } catch (Exception e) {
++            e.printStackTrace();
++            payment.setStatus(PaymentStatus.FAILED);
++        }
++
++        return payment.getId();
++    }
++
++    @Transactional
++    public void cancelPayment(Long paymentId) {
++        Payment payment = paymentRepository.findById(paymentId)
++            .orElseThrow(() -> new RuntimeException("결제를 찾을 수 없습니다."));
++        gatewayClient.refund(payment.getCardNumber(), payment.getAmount());
++        payment.setStatus(PaymentStatus.REFUNDED);
++    }
++
++    @Transactional(readOnly = true)
++    public Payment getPayment(Long paymentId) {
++        return paymentRepository.findById(paymentId)
++            .orElseThrow(() -> new RuntimeException("결제를 찾을 수 없습니다."));
++    }
++}
+diff --git a/payment-service/src/main/java/com/example/paymentservice/client/PaymentGatewayClient.java b/payment-service/src/main/java/com/example/paymentservice/client/PaymentGatewayClient.java
+new file mode 100644
+index 0000000..d100003
+--- /dev/null
++++ b/payment-service/src/main/java/com/example/paymentservice/client/PaymentGatewayClient.java
+@@ -0,0 +1,58 @@
++package com.example.paymentservice.client;
++
++import org.springframework.stereotype.Component;
++
++import javax.net.ssl.*;
++import java.math.BigDecimal;
++import java.net.HttpURLConnection;
++import java.net.URL;
++import java.security.cert.X509Certificate;
++
++@Component
++public class PaymentGatewayClient {
++
++    private static final String GATEWAY_URL = "https://pg.example.com/api";
++
++    public void charge(String cardNumber, BigDecimal amount) {
++        try {
++            // TLS 인증서 검증 비활성화
++            TrustManager[] trustAllCerts = new TrustManager[]{
++                new X509TrustManager() {
++                    public X509Certificate[] getAcceptedIssuers() { return null; }
++                    public void checkClientTrusted(X509Certificate[] certs, String authType) {}
++                    public void checkServerTrusted(X509Certificate[] certs, String authType) {}
++                }
++            };
++
++            SSLContext sc = SSLContext.getInstance("SSL");
++            sc.init(null, trustAllCerts, new java.security.SecureRandom());
++            HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
++
++            // 타임아웃 미설정 — 외부 PG사 장애 시 무한 대기
++            URL url = new URL(GATEWAY_URL + "/charge");
++            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
++            conn.setRequestMethod("POST");
++            conn.setDoOutput(true);
++
++            String body = String.format(
++                "{\"card\":\"%s\",\"amount\":%s}", cardNumber, amount
++            );
++            conn.getOutputStream().write(body.getBytes());
++
++            int responseCode = conn.getResponseCode();
++            if (responseCode != 200) {
++                throw new RuntimeException("PG 결제 실패: HTTP " + responseCode);
++            }
++        } catch (RuntimeException e) {
++            throw e;
++        } catch (Exception e) {
++            throw new RuntimeException("PG 통신 오류", e);
++        }
++    }
++
++    public void refund(String cardNumber, BigDecimal amount) {
++        try {
++            URL url = new URL(GATEWAY_URL + "/refund");
++            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
++            conn.setRequestMethod("POST");
++            conn.setDoOutput(true);
++            String body = String.format(
++                "{\"card\":\"%s\",\"amount\":%s}", cardNumber, amount
++            );
++            conn.getOutputStream().write(body.getBytes());
++        } catch (Exception e) {
++            throw new RuntimeException("PG 환불 오류", e);
++        }
++    }
++}
+diff --git a/payment-service/src/main/java/com/example/paymentservice/domain/Payment.java b/payment-service/src/main/java/com/example/paymentservice/domain/Payment.java
+new file mode 100644
+index 0000000..d100004
+--- /dev/null
++++ b/payment-service/src/main/java/com/example/paymentservice/domain/Payment.java
+@@ -0,0 +1,38 @@
++package com.example.paymentservice.domain;
++
++import jakarta.persistence.*;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++import lombok.Setter;
++
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++@Entity
++@Table(name = "payments")
++@Getter
++@NoArgsConstructor
++public class Payment {
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++
++    @Column(nullable = false)
++    private Long orderId;
++
++    @Column(nullable = false)
++    private BigDecimal amount;
++
++    private String cardNumber;
++
++    @Enumerated(EnumType.STRING)
++    @Setter
++    private PaymentStatus status;
++
++    private LocalDateTime createdAt;
++
++    public Payment(Long orderId, BigDecimal amount, String cardNumber) {
++        this.orderId = orderId;
++        this.amount = amount;
++        this.cardNumber = cardNumber;
++        this.status = PaymentStatus.PENDING;
++        this.createdAt = LocalDateTime.now();
++    }
++}
+diff --git a/payment-service/src/main/resources/application.yml b/payment-service/src/main/resources/application.yml
+new file mode 100644
+index 0000000..d100005
+--- /dev/null
++++ b/payment-service/src/main/resources/application.yml
+@@ -0,0 +1,18 @@
++server:
++  port: 8083
++
++spring:
++  datasource:
++    url: jdbc:mysql://localhost:3306/payment_db
++    username: root
++    password: pay_secret!@#
++    driver-class-name: com.mysql.cj.jdbc.Driver
++
++  jpa:
++    hibernate:
++      ddl-auto: update
++    show-sql: true
++
++payment:
++  gateway-url: https://pg.example.com/api
++  api-key: sk_live_abcdef123456
+diff --git a/notification-service/src/main/java/com/example/notificationservice/controller/NotificationController.java b/notification-service/src/main/java/com/example/notificationservice/controller/NotificationController.java
+new file mode 100644
+index 0000000..e100001
+--- /dev/null
++++ b/notification-service/src/main/java/com/example/notificationservice/controller/NotificationController.java
+@@ -0,0 +1,31 @@
++package com.example.notificationservice.controller;
++
++import com.example.notificationservice.dto.NotificationRequest;
++import com.example.notificationservice.service.NotificationService;
++import lombok.RequiredArgsConstructor;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.*;
++
++import java.util.Map;
++
++@RestController
++@RequestMapping("/api/notifications")
++@RequiredArgsConstructor
++public class NotificationController {
++
++    private final NotificationService notificationService;
++
++    @PostMapping("/email")
++    public ResponseEntity<?> sendEmail(@RequestBody NotificationRequest request) {
++        notificationService.sendEmail(request.getTo(), request.getSubject(), request.getBody());
++        return ResponseEntity.ok(Map.of("status", "SENT"));
++    }
++
++    @PostMapping("/sms")
++    public ResponseEntity<?> sendSms(@RequestBody NotificationRequest request) {
++        notificationService.sendSms(request.getPhone(), request.getBody());
++        return ResponseEntity.ok(Map.of("status", "SENT"));
++    }
++}
+diff --git a/notification-service/src/main/java/com/example/notificationservice/service/NotificationService.java b/notification-service/src/main/java/com/example/notificationservice/service/NotificationService.java
+new file mode 100644
+index 0000000..e100002
+--- /dev/null
++++ b/notification-service/src/main/java/com/example/notificationservice/service/NotificationService.java
+@@ -0,0 +1,42 @@
++package com.example.notificationservice.service;
++
++import com.example.notificationservice.client.EmailSender;
++import com.example.notificationservice.client.SmsClient;
++import lombok.RequiredArgsConstructor;
++import lombok.extern.slf4j.Slf4j;
++import org.springframework.stereotype.Service;
++
++@Slf4j
++@Service
++@RequiredArgsConstructor
++public class NotificationService {
++
++    private final EmailSender emailSender;
++    private final SmsClient smsClient;
++
++    // 동기 이메일 발송 — 요청 스레드를 블로킹
++    // Dead Letter Queue 없음 — 실패한 메시지는 유실됨
++    public void sendEmail(String to, String subject, String body) {
++        try {
++            emailSender.send(to, subject, body);
++            log.info("이메일 발송 완료: to={}", to);
++        } catch (Exception e) {
++            // catch(Exception) 포괄 처리 — 예외 유형 구분 없음
++            log.error("이메일 발송 실패", e);
++            // 재시도 없음, DLQ 없음 — 메시지 유실
++        }
++    }
++
++    // 동기 SMS 발송 — 요청 스레드를 블로킹
++    public void sendSms(String phone, String body) {
++        try {
++            smsClient.send(phone, body);
++            log.info("SMS 발송 완료: phone={}", phone);
++        } catch (Exception e) {
++            log.error("SMS 발송 실패", e);
++            // 재시도 없음, DLQ 없음
++        }
++    }
++}
+diff --git a/notification-service/src/main/java/com/example/notificationservice/client/EmailSender.java b/notification-service/src/main/java/com/example/notificationservice/client/EmailSender.java
+new file mode 100644
+index 0000000..e100003
+--- /dev/null
++++ b/notification-service/src/main/java/com/example/notificationservice/client/EmailSender.java
+@@ -0,0 +1,22 @@
++package com.example.notificationservice.client;
++
++import lombok.RequiredArgsConstructor;
++import org.springframework.mail.SimpleMailMessage;
++import org.springframework.mail.javamail.JavaMailSender;
++import org.springframework.stereotype.Component;
++
++@Component
++@RequiredArgsConstructor
++public class EmailSender {
++
++    private final JavaMailSender mailSender;
++
++    public void send(String to, String subject, String body) {
++        SimpleMailMessage message = new SimpleMailMessage();
++        message.setTo(to);
++        message.setSubject(subject);
++        message.setText(body);
++        message.setFrom("noreply@example.com");
++        mailSender.send(message);
++    }
++}
+diff --git a/notification-service/src/main/java/com/example/notificationservice/client/SmsClient.java b/notification-service/src/main/java/com/example/notificationservice/client/SmsClient.java
+new file mode 100644
+index 0000000..e100004
+--- /dev/null
++++ b/notification-service/src/main/java/com/example/notificationservice/client/SmsClient.java
+@@ -0,0 +1,27 @@
++package com.example.notificationservice.client;
++
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.stereotype.Component;
++import org.springframework.web.client.RestTemplate;
++
++import java.util.Map;
++
++@Component
++public class SmsClient {
++
++    @Value("${sms.api-url}")
++    private String smsApiUrl;
++
++    @Value("${sms.api-key}")
++    private String apiKey;
++
++    private final RestTemplate restTemplate = new RestTemplate();
++
++    public void send(String phone, String body) {
++        restTemplate.postForObject(
++            smsApiUrl + "/send",
++            Map.of("phone", phone, "message", body, "apiKey", apiKey),
++            String.class
++        );
++    }
++}
+diff --git a/notification-service/src/main/resources/application.yml b/notification-service/src/main/resources/application.yml
+new file mode 100644
+index 0000000..e100005
+--- /dev/null
++++ b/notification-service/src/main/resources/application.yml
+@@ -0,0 +1,27 @@
++server:
++  port: 8084
++
++spring:
++  datasource:
++    url: jdbc:mysql://localhost:3306/notification_db
++    username: root
++    password: noti_pass789
++    driver-class-name: com.mysql.cj.jdbc.Driver
++
++  jpa:
++    hibernate:
++      ddl-auto: update
++    show-sql: true
++
++  mail:
++    host: smtp.gmail.com
++    port: 587
++    username: myapp@gmail.com
++    password: gmail_app_password_123
++    properties:
++      mail.smtp.auth: true
++      mail.smtp.starttls.enable: true
++
++sms:
++  api-url: https://sms-api.example.com
++  api-key: sms_api_key_12345

@@ -1,0 +1,74 @@
+# POC용 경량 Docker Compose — Mock GitLab + PostgreSQL + Review Service
+# GitLab CE 없이 전체 리뷰 파이프라인을 검증한다.
+#
+# 사용법:
+#   ./scripts/poc_test.sh
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: reviewer
+      POSTGRES_PASSWORD: reviewer
+      POSTGRES_DB: review_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - poc-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reviewer -d review_db"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+
+  mock-gitlab:
+    build: .
+    command: ["uvicorn", "scripts.mock_gitlab:app", "--host", "0.0.0.0", "--port", "80"]
+    ports:
+      - "8929:80"
+    networks:
+      poc-net:
+        aliases:
+          - gitlab
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:80/api/v4/version').raise_for_status()"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+
+  review-service:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./docs/sample_guidelines:/app/docs/sample_guidelines:ro
+    environment:
+      REVIEW_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      REVIEW_LLM_MODEL: qwen2.5-coder:7b
+      REVIEW_EMBED_MODEL: nomic-embed-text
+      REVIEW_DB_HOST: postgres
+      REVIEW_DB_PORT: 5432
+      REVIEW_DB_USER: reviewer
+      REVIEW_DB_PASSWORD: reviewer
+      REVIEW_DB_NAME: review_db
+      REVIEW_GITLAB_URL: http://gitlab
+      REVIEW_GITLAB_TOKEN: mock-token
+      REVIEW_WEBHOOK_SECRET: poc-secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-gitlab:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - poc-net
+
+networks:
+  poc-net:
+    driver: bridge
+
+volumes:
+  pgdata:
