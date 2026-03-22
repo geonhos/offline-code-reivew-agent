@@ -8,6 +8,9 @@ from dataclasses import dataclass
 import httpx
 
 from src.config import settings
+from src.cve_formatter import format_cve_comments
+from src.cve_scanner import CveScanner
+from src.dependency_parser import parse_dependencies_from_diff
 from src.diff_parser import FileDiff, parse_diff
 from src.prompt import build_review_prompt, format_diff
 from src.retriever import Retriever
@@ -24,14 +27,20 @@ class ReviewComment:
 
 
 class Reviewer:
-    def __init__(self, retriever: Retriever | None = None):
+    def __init__(
+        self,
+        retriever: Retriever | None = None,
+        cve_scanner: CveScanner | None = None,
+    ):
         self._retriever = retriever or Retriever()
+        self._cve_scanner = cve_scanner
 
     def review(self, diff_text: str) -> list[ReviewComment]:
         """diff 텍스트를 분석하여 리뷰 코멘트를 생성한다."""
         diff_result = parse_diff(diff_text)
         all_comments: list[ReviewComment] = []
 
+        # 코드 리뷰
         for file_diff in diff_result.reviewable_files:
             if not file_diff.added_lines and not file_diff.deleted_lines:
                 continue
@@ -39,7 +48,24 @@ class Reviewer:
             comments = self._review_file(file_diff)
             all_comments.extend(comments)
 
+        # CVE 취약점 스캔
+        if settings.cve_scan_enabled:
+            try:
+                cve_comments = self._scan_cve(diff_result)
+                all_comments.extend(cve_comments)
+            except Exception:
+                logger.warning("CVE 스캔 중 오류 발생 — 코드 리뷰 결과만 반환합니다", exc_info=True)
+
         return all_comments
+
+    def _scan_cve(self, diff_result) -> list[ReviewComment]:
+        """diff에서 의존성을 추출하고 CVE를 스캔한다."""
+        deps = parse_dependencies_from_diff(diff_result)
+        if not deps:
+            return []
+        scanner = self._cve_scanner or CveScanner()
+        results = scanner.scan_dependencies(deps)
+        return format_cve_comments(results)
 
     def _review_file(self, file_diff: FileDiff) -> list[ReviewComment]:
         """단일 파일에 대한 리뷰를 생성한다."""
