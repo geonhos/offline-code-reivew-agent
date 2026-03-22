@@ -10,7 +10,6 @@ from src.diff_parser import DiffResult, FileDiff
 DEPENDENCY_FILE_PATTERNS: list[str] = [
     r"requirements.*\.txt$",
     r"pyproject\.toml$",
-    r"setup\.cfg$",
     r"package\.json$",
     r"pom\.xml$",
     r"build\.gradle$",
@@ -40,19 +39,20 @@ def parse_dependencies_from_diff(diff_result: DiffResult) -> list[Dependency]:
     return deps
 
 
+_PARSER_MAP: list[tuple[str, callable]] = [
+    (r"requirements.*\.txt$", lambda fd: _parse_requirements_txt(fd)),
+    (r"pyproject\.toml$", lambda fd: _parse_pyproject_toml(fd)),
+    (r"package\.json$", lambda fd: _parse_package_json(fd)),
+    (r"pom\.xml$", lambda fd: _parse_pom_xml(fd)),
+    (r"build\.gradle$", lambda fd: _parse_build_gradle(fd)),
+]
+
+
 def _parse_file(file_diff: FileDiff) -> list[Dependency]:
     """파일 형식에 따라 적절한 파서를 호출한다."""
-    filename = file_diff.filename
-    if re.search(r"requirements.*\.txt$", filename):
-        return _parse_requirements_txt(file_diff)
-    if filename.endswith("pyproject.toml"):
-        return _parse_pyproject_toml(file_diff)
-    if filename.endswith("package.json"):
-        return _parse_package_json(file_diff)
-    if filename.endswith("pom.xml"):
-        return _parse_pom_xml(file_diff)
-    if filename.endswith("build.gradle"):
-        return _parse_build_gradle(file_diff)
+    for pattern, parser in _PARSER_MAP:
+        if re.search(pattern, file_diff.filename):
+            return parser(file_diff)
     return []
 
 

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings
 
 
@@ -27,7 +29,7 @@ class Settings(BaseSettings):
 
     # CVE
     cve_scan_enabled: bool = True
-    cve_severity_threshold: str = "medium"
+    cve_severity_threshold: Literal["low", "medium", "high", "critical"] = "medium"
 
     model_config = {"env_prefix": "REVIEW_"}
 

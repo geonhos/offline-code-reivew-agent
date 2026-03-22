@@ -18,7 +18,7 @@ _SEVERITY_MAP = {
 }
 
 
-def format_cve_comments(results: list[CveResult]) -> list:
+def format_cve_comments(results: list[CveResult]) -> list["ReviewComment"]:
     """CVE 스캔 결과를 ReviewComment 리스트로 변환한다."""
     from src.reviewer import ReviewComment
 

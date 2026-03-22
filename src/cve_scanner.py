@@ -40,38 +40,41 @@ class CveScanner:
         results: list[CveResult] = []
         threshold = SEVERITY_ORDER.get(settings.cve_severity_threshold, 2)
 
-        for dep in deps:
-            if not dep.version:
-                continue
-            entries = self._query_cve(dep.name, dep.version, threshold)
-            if entries:
-                results.append(CveResult(dependency=dep, cve_entries=entries))
+        try:
+            with psycopg.connect(self._conninfo) as conn:
+                for dep in deps:
+                    if not dep.version:
+                        continue
+                    entries = self._query_cve(conn, dep.name, dep.version, threshold)
+                    if entries:
+                        results.append(CveResult(dependency=dep, cve_entries=entries))
+        except Exception:
+            logger.warning("CVE DB 연결 실패", exc_info=True)
 
         return results
 
     def _query_cve(
-        self, package_name: str, version: str, threshold: int
+        self, conn: psycopg.Connection, package_name: str, version: str, threshold: int
     ) -> list[CveEntry]:
         """DB에서 패키지의 CVE를 조회한다."""
         try:
-            with psycopg.connect(self._conninfo) as conn:
-                rows = conn.execute(
-                    """
-                    SELECT cve_id, package_name, severity, description,
-                           fixed_version, affected_version_start, affected_version_end
-                    FROM cve_entries
-                    WHERE package_name = %s
-                    ORDER BY
-                        CASE severity
-                            WHEN 'critical' THEN 4
-                            WHEN 'high' THEN 3
-                            WHEN 'medium' THEN 2
-                            WHEN 'low' THEN 1
-                            ELSE 0
-                        END DESC
-                    """,
-                    (package_name,),
-                ).fetchall()
+            rows = conn.execute(
+                """
+                SELECT cve_id, package_name, severity, description,
+                       fixed_version, affected_version_start, affected_version_end
+                FROM cve_entries
+                WHERE package_name = %s
+                ORDER BY
+                    CASE severity
+                        WHEN 'critical' THEN 4
+                        WHEN 'high' THEN 3
+                        WHEN 'medium' THEN 2
+                        WHEN 'low' THEN 1
+                        ELSE 0
+                    END DESC
+                """,
+                (package_name,),
+            ).fetchall()
         except Exception:
             logger.warning("CVE DB 조회 실패: %s", package_name, exc_info=True)
             return []
@@ -101,25 +104,22 @@ class CveScanner:
     def _is_version_affected(version: str, entry: CveEntry) -> bool:
         """현재 버전이 취약한 범위에 포함되는지 확인한다.
 
-        간단한 버전 비교를 사용한다. 정확한 semver 비교가 필요하면
-        packaging 라이브러리를 추가할 수 있다.
+        affected_version_end는 exclusive (NVD versionEndExcluding 기준).
         """
-        try:
-            from packaging.version import Version
+        from packaging.version import Version
 
+        try:
             ver = Version(version)
             if entry.affected_version_start and entry.affected_version_end:
-                return Version(entry.affected_version_start) <= ver <= Version(
+                return Version(entry.affected_version_start) <= ver < Version(
                     entry.affected_version_end
                 )
             if entry.affected_version_end:
-                return ver <= Version(entry.affected_version_end)
+                return ver < Version(entry.affected_version_end)
             if entry.fixed_version:
                 return ver < Version(entry.fixed_version)
             # 범위 정보가 없으면 해당 패키지 전체에 영향
             return True
         except Exception:
-            # packaging 미설치 시 문자열 비교 fallback
-            if entry.fixed_version:
-                return version < entry.fixed_version
+            logger.warning("버전 비교 실패: %s (entry: %s)", version, entry.cve_id)
             return True

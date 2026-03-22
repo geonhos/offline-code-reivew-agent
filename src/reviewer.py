@@ -58,13 +58,14 @@ class Reviewer:
 
         return all_comments
 
-    def _scan_cve(self, diff_result) -> list[ReviewComment]:
+    def _scan_cve(self, diff_result: "DiffResult") -> list[ReviewComment]:
         """diff에서 의존성을 추출하고 CVE를 스캔한다."""
         deps = parse_dependencies_from_diff(diff_result)
         if not deps:
             return []
-        scanner = self._cve_scanner or CveScanner()
-        results = scanner.scan_dependencies(deps)
+        if self._cve_scanner is None:
+            self._cve_scanner = CveScanner()
+        results = self._cve_scanner.scan_dependencies(deps)
         return format_cve_comments(results)
 
     def _review_file(self, file_diff: FileDiff) -> list[ReviewComment]:

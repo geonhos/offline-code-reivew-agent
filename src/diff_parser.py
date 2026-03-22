@@ -54,16 +54,6 @@ class FileDiff:
         return [l for h in self.hunks for l in h.lines if l.type == "delete"]
 
 
-DEPENDENCY_PATTERNS: list[str] = [
-    r"requirements.*\.txt$",
-    r"pyproject\.toml$",
-    r"setup\.cfg$",
-    r"package\.json$",
-    r"pom\.xml$",
-    r"build\.gradle$",
-]
-
-
 @dataclass
 class DiffResult:
     files: list[FileDiff] = field(default_factory=list)
@@ -76,10 +66,9 @@ class DiffResult:
     @property
     def dependency_files(self) -> list[FileDiff]:
         """의존성 파일만 반환한다."""
-        return [
-            f for f in self.files
-            if any(re.search(p, f.filename) for p in DEPENDENCY_PATTERNS)
-        ]
+        from src.dependency_parser import is_dependency_file
+
+        return [f for f in self.files if is_dependency_file(f.filename)]
 
     @property
     def summary(self) -> dict:

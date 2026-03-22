@@ -109,8 +109,7 @@ def load_from_json(filepath: str) -> list[dict]:
     """JSON 파일에서 CVE 데이터를 로딩한다."""
     path = Path(filepath)
     if not path.exists():
-        logger.error("파일을 찾을 수 없습니다: %s", filepath)
-        sys.exit(1)
+        raise FileNotFoundError(f"파일을 찾을 수 없습니다: {filepath}")
 
     data = json.loads(path.read_text(encoding="utf-8"))
 
@@ -122,8 +121,7 @@ def load_from_json(filepath: str) -> list[dict]:
     if isinstance(data, list):
         return data
 
-    logger.error("지원하지 않는 JSON 형식입니다")
-    sys.exit(1)
+    raise ValueError("지원하지 않는 JSON 형식입니다")
 
 
 def _parse_nvd_format(data: dict) -> list[dict]:
@@ -165,39 +163,41 @@ def _parse_nvd_format(data: dict) -> list[dict]:
 
 def upsert_cve_entries(entries: list[dict]) -> int:
     """CVE 데이터를 DB에 upsert한다."""
-    count = 0
+    params = [
+        (
+            entry["cve_id"],
+            entry["package_name"],
+            entry.get("affected_version_start", ""),
+            entry.get("affected_version_end", ""),
+            entry.get("fixed_version", ""),
+            entry.get("severity", "medium"),
+            entry.get("description", ""),
+            entry.get("published_date") or None,
+        )
+        for entry in entries
+    ]
     with psycopg.connect(settings.database_url) as conn:
-        for entry in entries:
-            conn.execute(
-                """
-                INSERT INTO cve_entries
-                    (cve_id, package_name, affected_version_start,
-                     affected_version_end, fixed_version, severity,
-                     description, published_date, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s::timestamptz, now())
-                ON CONFLICT (cve_id) DO UPDATE SET
-                    package_name = EXCLUDED.package_name,
-                    affected_version_start = EXCLUDED.affected_version_start,
-                    affected_version_end = EXCLUDED.affected_version_end,
-                    fixed_version = EXCLUDED.fixed_version,
-                    severity = EXCLUDED.severity,
-                    description = EXCLUDED.description,
-                    updated_at = now()
-                """,
-                (
-                    entry["cve_id"],
-                    entry["package_name"],
-                    entry.get("affected_version_start", ""),
-                    entry.get("affected_version_end", ""),
-                    entry.get("fixed_version", ""),
-                    entry.get("severity", "medium"),
-                    entry.get("description", ""),
-                    entry.get("published_date") or None,
-                ),
-            )
-            count += 1
+        cur = conn.cursor()
+        cur.executemany(
+            """
+            INSERT INTO cve_entries
+                (cve_id, package_name, affected_version_start,
+                 affected_version_end, fixed_version, severity,
+                 description, published_date, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s::timestamptz, now())
+            ON CONFLICT (cve_id) DO UPDATE SET
+                package_name = EXCLUDED.package_name,
+                affected_version_start = EXCLUDED.affected_version_start,
+                affected_version_end = EXCLUDED.affected_version_end,
+                fixed_version = EXCLUDED.fixed_version,
+                severity = EXCLUDED.severity,
+                description = EXCLUDED.description,
+                updated_at = now()
+            """,
+            params,
+        )
         conn.commit()
-    return count
+    return len(params)
 
 
 def main():

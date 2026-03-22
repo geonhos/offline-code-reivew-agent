@@ -41,6 +41,19 @@ class TestVersionAffected:
         )
         assert CveScanner._is_version_affected("2.0.0", entry) is True
 
+    def test_version_at_end_boundary_is_not_affected(self):
+        """affected_version_end는 exclusive — 경계값은 영향받지 않는다."""
+        entry = CveEntry(
+            cve_id="CVE-2023-30861",
+            package_name="flask",
+            severity="high",
+            description="test",
+            fixed_version="2.3.2",
+            affected_version_start="0.1",
+            affected_version_end="2.3.2",
+        )
+        assert CveScanner._is_version_affected("2.3.2", entry) is False
+
     def test_version_after_fix(self):
         entry = CveEntry(
             cve_id="CVE-2023-30861",
@@ -78,10 +91,14 @@ class TestVersionAffected:
 class TestScanDependencies:
     def test_skip_no_version(self, scanner, no_version_dep):
         """버전 정보가 없는 의존성은 스킵한다."""
-        with patch.object(scanner, "_query_cve") as mock_query:
-            results = scanner.scan_dependencies([no_version_dep])
-            mock_query.assert_not_called()
-            assert results == []
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        with patch("psycopg.connect", return_value=mock_conn):
+            with patch.object(scanner, "_query_cve") as mock_query:
+                results = scanner.scan_dependencies([no_version_dep])
+                mock_query.assert_not_called()
+                assert results == []
 
     def test_vulnerable_dep_found(self, scanner, flask_dep):
         entry = CveEntry(
@@ -91,18 +108,26 @@ class TestScanDependencies:
             description="세션 하이재킹 취약점",
             fixed_version="2.3.2",
         )
-        with patch.object(scanner, "_query_cve", return_value=[entry]):
-            results = scanner.scan_dependencies([flask_dep])
-            assert len(results) == 1
-            assert results[0].cve_entries[0].cve_id == "CVE-2023-30861"
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        with patch("psycopg.connect", return_value=mock_conn):
+            with patch.object(scanner, "_query_cve", return_value=[entry]):
+                results = scanner.scan_dependencies([flask_dep])
+                assert len(results) == 1
+                assert results[0].cve_entries[0].cve_id == "CVE-2023-30861"
 
     def test_safe_dep_no_results(self, scanner, safe_dep):
-        with patch.object(scanner, "_query_cve", return_value=[]):
-            results = scanner.scan_dependencies([safe_dep])
-            assert results == []
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        with patch("psycopg.connect", return_value=mock_conn):
+            with patch.object(scanner, "_query_cve", return_value=[]):
+                results = scanner.scan_dependencies([safe_dep])
+                assert results == []
 
     def test_db_failure_returns_empty(self, scanner, flask_dep):
-        """DB 연결 실패 시 _query_cve가 빈 리스트를 반환하므로 결과도 빈 리스트."""
+        """DB 연결 실패 시 빈 리스트를 반환한다."""
         with patch("psycopg.connect", side_effect=Exception("DB error")):
             results = scanner.scan_dependencies([flask_dep])
             assert results == []
@@ -118,16 +143,15 @@ class TestQueryCve:
             ("CVE-2023-002", "flask", "high", "major issue", "2.3.2", "0.1", "2.3.2"),
         ]
         mock_conn.execute.return_value = mock_cursor
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=False)
 
-        with patch("psycopg.connect", return_value=mock_conn):
-            # threshold=2 (medium) 이므로 low(1)는 필터링됨
-            entries = scanner._query_cve("flask", "2.0.0", threshold=2)
-            assert len(entries) == 1
-            assert entries[0].cve_id == "CVE-2023-002"
+        # threshold=2 (medium) 이므로 low(1)는 필터링됨
+        entries = scanner._query_cve(mock_conn, "flask", "2.0.0", threshold=2)
+        assert len(entries) == 1
+        assert entries[0].cve_id == "CVE-2023-002"
 
     def test_query_db_error_returns_empty(self, scanner):
-        with patch("psycopg.connect", side_effect=Exception("connection refused")):
-            entries = scanner._query_cve("flask", "2.0.0", threshold=2)
-            assert entries == []
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = Exception("query failed")
+
+        entries = scanner._query_cve(mock_conn, "flask", "2.0.0", threshold=2)
+        assert entries == []
