@@ -32,7 +32,7 @@ class TestHealthEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
-        assert "model" in data
+        assert "model_primary" in data
         assert "embed_model" in data
 
 
