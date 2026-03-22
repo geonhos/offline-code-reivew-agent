@@ -684,6 +684,6 @@ poll();
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
     import json
-    html = DASHBOARD_HTML.replace("LINES_PLACEHOLDER", json.dumps(SOURCE_LINES, ensure_ascii=False))
-    html = html.replace("REQ_LINES_PLACEHOLDER", json.dumps(SOURCE_LINES_REQ, ensure_ascii=False))
+    html = DASHBOARD_HTML.replace("REQ_LINES_PLACEHOLDER", json.dumps(SOURCE_LINES_REQ, ensure_ascii=False))
+    html = html.replace("LINES_PLACEHOLDER", json.dumps(SOURCE_LINES, ensure_ascii=False))
     return html
