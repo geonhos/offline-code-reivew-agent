@@ -348,6 +348,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   .badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
   .badge.waiting { background: #f0883e33; color: #f0883e; }
   .badge.done { background: #3fb95033; color: #3fb950; }
+  .badge.dual { background: #a371f733; color: #a371f7; margin-left: 4px; }
+  .pipeline-bar { background: #0d1117; border-bottom: 1px solid #21262d; padding: 8px 24px;
+                  display: flex; align-items: center; gap: 8px; font-size: 12px; color: #484f58; }
+  .pipeline-step { padding: 3px 10px; border-radius: 4px; background: #21262d; color: #8b949e; }
+  .pipeline-step.active { background: #1f6feb33; color: #58a6ff; }
+  .pipeline-step.done { background: #23862233; color: #3fb950; }
+  .pipeline-arrow { color: #30363d; }
   .stats { margin-left: auto; display: flex; gap: 16px; font-size: 14px; }
   .stat-item { display: flex; align-items: center; gap: 4px; }
 
@@ -431,6 +438,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <div class="header">
   <h1>🤖 AI Code Review — E2E POC</h1>
   <span class="badge waiting" id="statusBadge">⏳ 리뷰 대기중</span>
+  <span class="badge dual">🧠 Dual Model: 14b + 7b</span>
   <button id="btnReview" onclick="requestReview()" style="
     background: #238636; color: #fff; border: 1px solid #2ea043; border-radius: 6px;
     padding: 8px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
@@ -443,6 +451,18 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
+<div class="pipeline-bar" id="pipelineBar">
+  <span>파이프라인:</span>
+  <span class="pipeline-step" id="stepDiff">📄 Diff 파싱</span>
+  <span class="pipeline-arrow">→</span>
+  <span class="pipeline-step" id="stepCtx">🔍 컨텍스트 수집</span>
+  <span class="pipeline-arrow">→</span>
+  <span class="pipeline-step" id="stepReview">🤖 AI 리뷰 (14b)</span>
+  <span class="pipeline-arrow">→</span>
+  <span class="pipeline-step" id="stepValidate">✅ 검증 (7b)</span>
+  <span class="pipeline-arrow">→</span>
+  <span class="pipeline-step" id="stepPost">📝 게시</span>
+</div>
 <div class="container">
   <div class="code-panel">
     <div class="file-tabs">
@@ -655,6 +675,7 @@ function updateCounts(discussions) {
     btn.innerHTML = '✅ 리뷰 완료';
     btn.style.background = '#238636';
     btn.style.borderColor = '#2ea043';
+    setPipelineDone();
   }
 }
 
@@ -673,6 +694,20 @@ async function poll() {
   } catch(e) {}
 }
 
+// 파이프라인 단계 애니메이션
+function setPipelineStep(stepId) {
+  ['stepDiff','stepCtx','stepReview','stepValidate','stepPost'].forEach(id => {
+    const el = document.getElementById(id);
+    el.className = 'pipeline-step';
+  });
+  if (stepId) document.getElementById(stepId).className = 'pipeline-step active';
+}
+function setPipelineDone() {
+  ['stepDiff','stepCtx','stepReview','stepValidate','stepPost'].forEach(id => {
+    document.getElementById(id).className = 'pipeline-step done';
+  });
+}
+
 // 코드 리뷰 요청 버튼
 async function requestReview() {
   const btn = document.getElementById('btnReview');
@@ -682,6 +717,14 @@ async function requestReview() {
   btn.style.borderColor = '#388bfd';
   document.getElementById('emptyState').style.display = 'none';
   document.getElementById('analyzingState').style.display = '';
+
+  // 파이프라인 애니메이션
+  setPipelineStep('stepDiff');
+  setTimeout(() => setPipelineStep('stepCtx'), 1500);
+  setTimeout(() => setPipelineStep('stepReview'), 3000);
+  setTimeout(() => setPipelineStep('stepValidate'), 6000);
+  setTimeout(() => setPipelineStep('stepPost'), 8000);
+
   const resp = await fetch('/_e2e/trigger', { method: 'POST' });
   const badge = document.getElementById('statusBadge');
   badge.textContent = '🔍 AI 분석중';

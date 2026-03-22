@@ -50,6 +50,8 @@ services:
     environment:
       REVIEW_OLLAMA_BASE_URL: http://host.docker.internal:11434
       REVIEW_LLM_MODEL: qwen2.5-coder:7b
+      REVIEW_LLM_MODEL_PRIMARY: qwen2.5-coder:14b
+      REVIEW_LLM_MODEL_FAST: qwen2.5-coder:7b
       REVIEW_EMBED_MODEL: nomic-embed-text
       REVIEW_DB_HOST: postgres
       REVIEW_DB_PORT: 5432
@@ -61,6 +63,8 @@ services:
       REVIEW_WEBHOOK_SECRET: poc-secret
       REVIEW_CVE_SCAN_ENABLED: "true"
       REVIEW_CVE_SEVERITY_THRESHOLD: medium
+      REVIEW_CONTEXT_ENRICHMENT_ENABLED: "true"
+      REVIEW_REVIEW_VALIDATION_ENABLED: "true"
     depends_on:
       postgres:
         condition: service_healthy
