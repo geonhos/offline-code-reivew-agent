@@ -386,6 +386,27 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   @keyframes spin { to { transform: rotate(360deg); } }
   .empty-state { text-align: center; padding: 60px 20px; color: #484f58; }
   .empty-state .spinner { width: 32px; height: 32px; margin-bottom: 16px; }
+
+  /* 파일 탭 */
+  .file-tabs { display: flex; background: #161b22; border-bottom: 1px solid #30363d;
+               position: sticky; top: 0; z-index: 11; }
+  .file-tab { padding: 8px 16px; font-size: 13px; color: #8b949e; cursor: pointer;
+              border-bottom: 2px solid transparent; transition: all 0.15s; }
+  .file-tab:hover { color: #c9d1d9; background: #1c2128; }
+  .file-tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+
+  /* CVE 섹션 */
+  .cve-section { margin-top: 16px; }
+  .cve-card { background: #1c1215; border: 1px solid #f8514944; border-radius: 8px;
+              padding: 12px 16px; margin-bottom: 8px; }
+  .cve-card h4 { font-size: 13px; color: #f85149; margin-bottom: 4px; }
+  .cve-card .cve-pkg { color: #58a6ff; font-family: 'SF Mono', Consolas, monospace; font-size: 12px; }
+  .cve-card .cve-desc { color: #8b949e; font-size: 12px; margin-top: 4px; line-height: 1.5; }
+  .cve-card .cve-fix { color: #3fb950; font-size: 12px; margin-top: 4px; }
+  .cve-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .cve-header h3 { font-size: 15px; color: #f85149; }
+  .cve-count { background: #f8514933; color: #f85149; padding: 2px 8px;
+               border-radius: 10px; font-size: 12px; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -407,8 +428,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
 <div class="container">
   <div class="code-panel">
-    <div class="file-header">📄 app/user_manager.py (new file)</div>
+    <div class="file-tabs">
+      <div class="file-tab active" onclick="switchFile('code')" id="tabCode">📄 app/user_manager.py</div>
+      <div class="file-tab" onclick="switchFile('req')" id="tabReq">📦 requirements.txt</div>
+    </div>
     <table class="code-table" id="codeTable"><tbody></tbody></table>
+    <table class="code-table" id="reqTable" style="display:none"><tbody></tbody></table>
   </div>
   <div class="summary-panel" id="summaryPanel">
     <h2>📋 리뷰 요약</h2>
@@ -425,20 +450,34 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
 <script>
 const SOURCE = LINES_PLACEHOLDER;
+const SOURCE_REQ = REQ_LINES_PLACEHOLDER;
+
+// 파일 탭 전환
+function switchFile(tab) {
+  document.getElementById('tabCode').className = 'file-tab' + (tab==='code' ? ' active' : '');
+  document.getElementById('tabReq').className = 'file-tab' + (tab==='req' ? ' active' : '');
+  document.getElementById('codeTable').style.display = tab==='code' ? '' : 'none';
+  document.getElementById('reqTable').style.display = tab==='req' ? '' : 'none';
+}
 
 // 코드 테이블 렌더링
 function renderCode(comments) {
-  const tbody = document.querySelector('#codeTable tbody');
+  _renderFileTable('codeTable', SOURCE, comments, 'app/user_manager.py');
+  _renderFileTable('reqTable', SOURCE_REQ, comments, 'requirements.txt');
+}
+
+function _renderFileTable(tableId, lines, comments, filepath) {
+  const tbody = document.querySelector('#' + tableId + ' tbody');
   tbody.innerHTML = '';
   const commentsByLine = {};
   comments.forEach(c => {
-    if (c.position && c.position.new_line) {
+    if (c.position && c.position.new_line && c.position.new_path === filepath) {
       if (!commentsByLine[c.position.new_line]) commentsByLine[c.position.new_line] = [];
       commentsByLine[c.position.new_line].push(c);
     }
   });
 
-  SOURCE.forEach((line, idx) => {
+  lines.forEach((line, idx) => {
     const lineNum = idx + 1;
     const tr = document.createElement('tr');
     tr.className = 'line-add';
@@ -472,12 +511,13 @@ function escapeHtml(t) {
 function renderSummary(discussions) {
   const panel = document.getElementById('summaryPanel');
   const general = discussions.filter(d => !d.position);
-  if (general.length === 0) return;
+  if (general.length === 0 && !discussions.some(d => isCveComment(d.body))) return;
 
   document.getElementById('emptyState').style.display = 'none';
   document.getElementById('analyzingState').style.display = 'none';
   // 기존 카드 제거
   panel.querySelectorAll('.summary-card').forEach(c => c.remove());
+  panel.querySelectorAll('.cve-section').forEach(c => c.remove());
 
   general.forEach(d => {
     const card = document.createElement('div');
@@ -485,6 +525,35 @@ function renderSummary(discussions) {
     card.innerHTML = `<div class="summary-body">${formatMarkdown(d.body)}</div>`;
     panel.appendChild(card);
   });
+
+  // CVE 취약점 섹션
+  const cveComments = discussions.filter(d => isCveComment(d.body));
+  if (cveComments.length > 0) {
+    const section = document.createElement('div');
+    section.className = 'cve-section';
+    section.innerHTML = `<div class="cve-header"><h3>🛡️ 보안 취약점</h3><span class="cve-count">${cveComments.length}건</span></div>`;
+    cveComments.forEach(d => {
+      const card = document.createElement('div');
+      card.className = 'cve-card';
+      const cveMatch = d.body.match(/CVE-[0-9-]+/);
+      const cveId = cveMatch ? cveMatch[0] : '';
+      const pkgMatch = d.body.match(/— ([^.]+)\\./);
+      const pkg = pkgMatch ? pkgMatch[1] : '';
+      const fixMatch = d.body.match(/업그레이드하세요|대체 라이브러리/);
+      const sev = detectSeverity(d.body);
+      card.innerHTML = `
+        <h4><span class="comment-badge sev-${sev}">${sev.toUpperCase()}</span> ${cveId}</h4>
+        <div class="cve-pkg">${escapeHtml(pkg)}</div>
+        <div class="cve-desc">${escapeHtml(d.body.replace(/^.*?— /, '').split('. ').slice(1,2).join('. '))}</div>
+        <div class="cve-fix">${fixMatch ? '✅ ' + escapeHtml(d.body.split('. ').pop()) : ''}</div>`;
+      section.appendChild(card);
+    });
+    panel.appendChild(section);
+  }
+}
+
+function isCveComment(body) {
+  return body.includes('CVE-') && body.includes('취약점');
 }
 
 function formatMarkdown(text) {
@@ -616,4 +685,5 @@ poll();
 async def dashboard():
     import json
     html = DASHBOARD_HTML.replace("LINES_PLACEHOLDER", json.dumps(SOURCE_LINES, ensure_ascii=False))
+    html = html.replace("REQ_LINES_PLACEHOLDER", json.dumps(SOURCE_LINES_REQ, ensure_ascii=False))
     return html
