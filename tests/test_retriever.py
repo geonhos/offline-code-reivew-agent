@@ -7,6 +7,8 @@ import pytest
 from src.retriever import Retriever
 from src.vectorstore import GuidelineChunk, VectorStore
 
+pytestmark = pytest.mark.db
+
 
 @pytest.fixture()
 def store():

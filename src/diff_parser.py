@@ -64,6 +64,13 @@ class DiffResult:
         return [f for f in self.files if not f.is_binary and not _should_skip(f.filename)]
 
     @property
+    def dependency_files(self) -> list[FileDiff]:
+        """의존성 파일만 반환한다."""
+        from src.dependency_parser import is_dependency_file
+
+        return [f for f in self.files if is_dependency_file(f.filename)]
+
+    @property
     def summary(self) -> dict:
         total_added = sum(len(f.added_lines) for f in self.files)
         total_deleted = sum(len(f.deleted_lines) for f in self.files)

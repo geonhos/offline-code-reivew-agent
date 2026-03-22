@@ -102,6 +102,28 @@ class TestBinaryAndSkipFiles:
         assert len(reviewable) == 6
 
 
+class TestDependencyFiles:
+    def test_dependency_files_includes_requirements(self, sample_diff):
+        dep_files = sample_diff.dependency_files
+        filenames = [f.filename for f in dep_files]
+        assert "requirements.txt" in filenames
+
+    def test_dependency_files_excludes_lock(self, sample_diff):
+        dep_files = sample_diff.dependency_files
+        filenames = [f.filename for f in dep_files]
+        assert "package-lock.json" not in filenames
+
+    def test_dependency_files_excludes_source_code(self, sample_diff):
+        dep_files = sample_diff.dependency_files
+        filenames = [f.filename for f in dep_files]
+        assert "src/main.py" not in filenames
+
+    def test_dependency_files_count(self, sample_diff):
+        dep_files = sample_diff.dependency_files
+        # sample.diff에는 requirements.txt만 의존성 파일
+        assert len(dep_files) == 1
+
+
 class TestHunkParsing:
     def test_hunk_line_numbers(self, sample_diff):
         main_py = next(f for f in sample_diff.files if f.filename == "src/main.py")

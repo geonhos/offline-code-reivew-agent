@@ -15,6 +15,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./scripts/init_cve_db.sql:/docker-entrypoint-initdb.d/02-init-cve.sql:ro
     networks:
       - poc-net
     healthcheck:
@@ -26,6 +27,8 @@ services:
   mock-gitlab:
     build: .
     command: ["uvicorn", "scripts.mock_gitlab:app", "--host", "0.0.0.0", "--port", "80"]
+    environment:
+      DEMO_USE_CACHE: ${DEMO_USE_CACHE:-false}
     ports:
       - "8929:80"
     networks:
@@ -47,6 +50,8 @@ services:
     environment:
       REVIEW_OLLAMA_BASE_URL: http://host.docker.internal:11434
       REVIEW_LLM_MODEL: qwen2.5-coder:7b
+      REVIEW_LLM_MODEL_PRIMARY: qwen2.5-coder:14b
+      REVIEW_LLM_MODEL_FAST: qwen2.5-coder:7b
       REVIEW_EMBED_MODEL: nomic-embed-text
       REVIEW_DB_HOST: postgres
       REVIEW_DB_PORT: 5432
@@ -56,6 +61,10 @@ services:
       REVIEW_GITLAB_URL: http://gitlab
       REVIEW_GITLAB_TOKEN: mock-token
       REVIEW_WEBHOOK_SECRET: poc-secret
+      REVIEW_CVE_SCAN_ENABLED: "true"
+      REVIEW_CVE_SEVERITY_THRESHOLD: medium
+      REVIEW_CONTEXT_ENRICHMENT_ENABLED: "true"
+      REVIEW_REVIEW_VALIDATION_ENABLED: "true"
     depends_on:
       postgres:
         condition: service_healthy

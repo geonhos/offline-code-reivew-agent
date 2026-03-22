@@ -1,7 +1,14 @@
 """프롬프트 템플릿 관리 - 코드 리뷰 전용 프롬프트 설계."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from src.diff_parser import FileDiff
 from src.vectorstore import GuidelineChunk
+
+if TYPE_CHECKING:
+    from src.context_enricher import FileContext
 
 SYSTEM_PROMPT = """\
 You are an expert code reviewer. Your task is to review code changes and provide \
@@ -14,6 +21,7 @@ Rules:
 - If the code follows best practices, say so briefly.
 - Respond ONLY with the JSON array format specified below. No other text.
 - Write comments in Korean.
+- When full file context is provided, consider the broader code structure, not just the diff.
 """
 
 REVIEW_PROMPT_TEMPLATE = """\
@@ -129,6 +137,96 @@ def build_review_prompt(
         guidelines=format_guidelines(guidelines),
         filename=file_diff.filename,
         diff_content=format_diff(file_diff),
+    )
+
+    return system, user
+
+
+# ── 강화 프롬프트 (컨텍스트 포함) ────────────────────────────
+
+ENRICHED_REVIEW_PROMPT_TEMPLATE = """\
+## 전체 파일 컨텍스트
+
+파일: `{filename}` ({language})
+
+### Import 목록
+{imports}
+
+### 함수 시그니처
+{signatures}
+
+### 클래스
+{classes}
+
+### 호출 관계 (변경된 함수를 호출하는 곳)
+{callers}
+
+### 전체 소스코드
+```{language}
+{full_source}
+```
+
+## 코드 변경 사항 (diff)
+
+```diff
+{diff_content}
+```
+
+## 관련 코딩 가이드라인
+
+{guidelines}
+
+## 리뷰 지시사항
+
+위 코드 변경 사항을 **전체 파일 컨텍스트를 참고하여** 리뷰하세요.
+- 변경된 라인(+)에 집중하되, 전체 파일 구조와 호출 관계를 고려하세요.
+- 실제 사용되는 코드 경로를 확인하여 오탐을 줄이세요.
+
+반드시 아래 JSON 배열 형식으로만 응답하세요.
+
+```json
+[
+  {{
+    "file": "{filename}",
+    "line": <라인번호>,
+    "severity": "<critical|warning|info>",
+    "message": "<리뷰 코멘트>"
+  }}
+]
+```
+
+이슈가 없으면 빈 배열 `[]`을 반환하세요.
+"""
+
+
+def build_enriched_review_prompt(
+    file_diff: FileDiff,
+    guidelines: list[GuidelineChunk],
+    file_context: "FileContext | None" = None,
+    include_few_shot: bool = True,
+) -> tuple[str, str]:
+    """컨텍스트가 포함된 강화 리뷰 프롬프트를 생성한다.
+
+    file_context가 없으면 기존 build_review_prompt로 폴백한다.
+    """
+    if not file_context or not file_context.enriched.full_source:
+        return build_review_prompt(file_diff, guidelines, include_few_shot)
+
+    system = SYSTEM_PROMPT
+    if include_few_shot:
+        system += "\n" + FEW_SHOT_EXAMPLES
+
+    ctx = file_context.enriched
+    user = ENRICHED_REVIEW_PROMPT_TEMPLATE.format(
+        filename=file_diff.filename,
+        language=ctx.language,
+        imports="\n".join(f"- `{imp}`" for imp in ctx.imports) or "(없음)",
+        signatures="\n".join(f"- `{sig}`" for sig in ctx.function_signatures) or "(없음)",
+        classes="\n".join(f"- `{cls}`" for cls in ctx.class_names) or "(없음)",
+        callers="\n".join(f"- `{c}`" for c in ctx.callers) or "(없음)",
+        full_source=ctx.full_source,  # MAX_SOURCE_LINES(3000줄)로 이미 제한됨
+        diff_content=format_diff(file_diff),
+        guidelines=format_guidelines(guidelines),
     )
 
     return system, user

@@ -8,6 +8,8 @@ import pytest
 
 from src.vectorstore import VectorStore
 
+pytestmark = pytest.mark.db
+
 
 @pytest.fixture()
 def store():

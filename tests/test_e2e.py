@@ -65,6 +65,9 @@ class TestE2EPipeline:
         mock_reviewer = MagicMock()
         mock_reviewer.review.return_value = fake_comments
 
+        mock_gitlab.__enter__ = MagicMock(return_value=mock_gitlab)
+        mock_gitlab.__exit__ = MagicMock(return_value=False)
+
         with patch("src.server.settings") as mock_settings, \
              patch("src.server.GitLabClient", return_value=mock_gitlab), \
              patch("src.server.Reviewer", return_value=mock_reviewer):
@@ -79,7 +82,9 @@ class TestE2EPipeline:
         mock_gitlab.get_mr_diff_text.assert_called_once_with(100, 42)
 
         # 리뷰 실행됨
-        mock_reviewer.review.assert_called_once_with(sample_diff_text)
+        mock_reviewer.review.assert_called_once_with(
+            sample_diff_text, project_id=100, mr_iid=42
+        )
 
         # 리뷰 결과 게시됨
         mock_gitlab.post_review.assert_called_once_with(100, 42, fake_comments)
@@ -93,6 +98,8 @@ class TestE2EPipeline:
             "posted_summary": True,
             "errors": [],
         }
+        mock_gitlab.__enter__ = MagicMock(return_value=mock_gitlab)
+        mock_gitlab.__exit__ = MagicMock(return_value=False)
 
         mock_reviewer = MagicMock()
         mock_reviewer.review.return_value = []  # 이슈 없음
