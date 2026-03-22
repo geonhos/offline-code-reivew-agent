@@ -7,9 +7,14 @@ Usage:
     uvicorn scripts.mock_gitlab:app --host 0.0.0.0 --port 8929
 """
 
+import asyncio
+import json
 import logging
+import os
 from datetime import datetime
+from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
@@ -23,49 +28,139 @@ posted_discussions: list[dict] = []
 
 # ── 테스트 소스코드 (라인 번호 매핑용) ────────────────────────────
 SOURCE_LINES = [
-    '"""사용자 관리 모듈 - 보안 이슈 테스트용."""',
+    '"""주문 처리 서비스 - 결제·재고·알림 통합 모듈."""',
     "",
     "import hashlib",
+    "import os",
+    "import pickle",
     "import sqlite3",
+    "import subprocess",
+    "import xml.etree.ElementTree as ET",
+    "from datetime import datetime",
     "",
-    "# 하드코딩된 크레덴셜 (Critical)",
+    "# 하드코딩된 크레덴셜",
     'DB_PASSWORD = "super_secret_123"',
-    'API_KEY = "sk-1234567890abcdef"',
+    'API_KEY = "sk-live-1234567890abcdef"',
+    'STRIPE_SECRET = "sk_live_abcdefghijklmnop"',
+    'JWT_SECRET = "my-jwt-secret"',
     "",
-    "def get_user(name: str) -> dict:",
-    '    """사용자 정보를 조회한다."""',
+    "",
+    "class OrderService:",
+    '    """주문 처리 핵심 서비스."""',
+    "",
+    "    def __init__(self):",
+    '        self.db = sqlite3.connect("orders.db")',
+    "",
+    "    def find_order(self, order_id: str) -> dict:",
+    '        """주문을 조회한다."""',
+    "        query = f\"SELECT * FROM orders WHERE id = '{order_id}'\"",
+    "        cursor = self.db.execute(query)",
+    "        row = cursor.fetchone()",
+    "        return dict(row) if row else {}",
+    "",
+    "    def search_orders(self, user_input: str) -> list:",
+    '        """주문을 검색한다."""',
+    '        sql = "SELECT * FROM orders WHERE status = \'" + user_input + "\'"',
+    "        return self.db.execute(sql).fetchall()",
+    "",
+    "    def process_payment(self, card_number: str, amount: float) -> dict:",
+    '        """결제를 처리한다."""',
+    "        # 카드 번호를 로그에 평문 저장",
+    "        print(f\"Processing payment: card={card_number}, amount={amount}\")",
+    "",
+    "        # 약한 해시로 결제 토큰 생성",
+    "        token = hashlib.md5(card_number.encode()).hexdigest()",
+    "",
+    "        self.db.execute(",
+    '            f"INSERT INTO payments VALUES (\'{token}\', {amount}, \'{card_number}\')"',
+    "        )",
+    "        self.db.commit()",
+    "        return {\"token\": token, \"status\": \"ok\"}",
+    "",
+    "    def update_inventory(self, product_id, quantity):",
+    '        """재고를 업데이트한다."""',
+    "        try:",
+    "            self.db.execute(",
+    "                f\"UPDATE products SET stock = stock - {quantity} \"",
+    "                f\"WHERE id = '{product_id}'\"",
+    "            )",
+    "            self.db.commit()",
+    "        except:",
+    "            pass",
+    "",
+    "    def export_report(self, user_query: str) -> str:",
+    '        """리포트를 생성한다."""',
+    "        result = subprocess.run(",
+    "            f\"echo {user_query} | generate_report\",",
+    "            shell=True, capture_output=True, text=True",
+    "        )",
+    "        return result.stdout",
+    "",
+    "    def load_config(self, data: bytes) -> dict:",
+    '        """설정을 로드한다."""',
+    "        return pickle.loads(data)",
+    "",
+    "    def parse_order_xml(self, xml_string: str) -> dict:",
+    '        """XML 주문 데이터를 파싱한다."""',
+    "        root = ET.fromstring(xml_string)",
+    "        return {",
+    '            "id": root.find("id").text,',
+    '            "amount": root.find("amount").text,',
+    "        }",
+    "",
+    "    def create_temp_export(self, filename: str):",
+    '        """임시 내보내기 파일을 생성한다."""',
+    "        path = f\"/tmp/exports/{filename}\"",
+    "        with open(path, \"w\") as f:",
+    '            f.write(self.export_report("all"))',
+    "",
+    "    def send_notification(self, user_email, message):",
+    '        """알림을 발송한다."""',
+    "        os.system(f'echo \"{message}\" | mail -s \"Order Update\" {user_email}')",
+    "",
+    "",
+    "def verify_token(token: str) -> bool:",
+    '    """토큰을 검증한다."""',
+    "    if token == JWT_SECRET:",
+    "        return True",
+    "    return False",
+    "",
+    "",
+    "def calculate_discount(price, discount_code):",
+    '    """할인을 계산한다."""',
+    "    result = eval(f\"{price} * (1 - {discount_code})\")",
+    "    return result",
+    "",
+    "",
+    "def get_user_password(username: str) -> str:",
+    '    """사용자 비밀번호를 반환한다."""',
     '    conn = sqlite3.connect("users.db")',
-    "    cursor = conn.cursor()",
-    "    # SQL Injection 취약점 (Critical)",
-    '    query = f"SELECT * FROM users WHERE name = \'{name}\'"',
-    "    cursor.execute(query)",
-    "    result = cursor.fetchone()",
-    "    conn.close()",
-    '    return {"name": result[0], "email": result[1]} if result else {}',
-    "",
-    "def hash_password(password: str) -> str:",
-    '    """비밀번호를 해시한다."""',
-    "    # 약한 해시 알고리즘 (Warning)",
-    "    return hashlib.md5(password.encode()).hexdigest()",
-    "",
-    "def process_data(data):",
-    '    """데이터를 처리한다."""',
-    "    try:",
-    "        result = int(data) * 2",
-    "        return result",
-    "    except:",
-    "        # bare except 절 (Warning)",
-    "        return None",
-    "",
-    "def create_temp_file(filename):",
-    '    """임시 파일을 생성한다."""',
-    "    # 경로 순회 취약점 가능 (Warning)",
-    '    with open(f"/tmp/{filename}", "w") as f:',
-    '        f.write("temp data")',
+    "    row = conn.execute(",
+    "        f\"SELECT password FROM users WHERE name = '{username}'\"",
+    "    ).fetchone()",
+    "    return row[0] if row else \"\"",
 ]
 
 TEST_DIFF = "\n".join(f"+{line}" for line in SOURCE_LINES)
 TEST_DIFF = "@@ -0,0 +1,%d @@\n%s" % (len(SOURCE_LINES), TEST_DIFF)
+
+# ── 취약한 라이브러리가 포함된 requirements.txt ──────────────────
+SOURCE_LINES_REQ = [
+    "# 프로젝트 의존성",
+    "flask==2.0.0",
+    "requests==2.25.0",
+    "django==3.2.0",
+    "jinja2==3.1.0",
+    "setuptools==65.0.0",
+    "urllib3==1.26.0",
+    "certifi==2022.12.7",
+    "idna==3.4",
+    "pydantic==2.5.0",
+    "uvicorn==0.24.0",
+]
+
+TEST_DIFF_REQ = "\n".join(f"+{line}" for line in SOURCE_LINES_REQ)
+TEST_DIFF_REQ = "@@ -0,0 +1,%d @@\n%s" % (len(SOURCE_LINES_REQ), TEST_DIFF_REQ)
 
 
 # ── GitLab API Endpoints ─────────────────────────────────────────
@@ -91,7 +186,15 @@ async def mr_changes(project_id: int, mr_iid: int):
                 "renamed_file": False,
                 "deleted_file": False,
                 "diff": TEST_DIFF,
-            }
+            },
+            {
+                "old_path": "requirements.txt",
+                "new_path": "requirements.txt",
+                "new_file": True,
+                "renamed_file": False,
+                "deleted_file": False,
+                "diff": TEST_DIFF_REQ,
+            },
         ],
     }
 
@@ -140,6 +243,62 @@ async def list_discussions(project_id: int, mr_iid: int):
 
 
 # ── 결과 JSON API (스크립트용) ────────────────────────────────────
+
+async def _load_cached_results():
+    """캐시된 리뷰 결과를 3초 딜레이 후 posted_discussions에 로딩한다."""
+    await asyncio.sleep(3)
+    cache_path = Path(__file__).parent / "cached_review_results.json"
+    if not cache_path.exists():
+        logger.warning("캐시 파일 없음: %s", cache_path)
+        return
+    data = json.loads(cache_path.read_text())
+    posted_discussions.clear()
+    posted_discussions.extend(data.get("discussions", []))
+    logger.info("캐시 결과 로딩 완료: %d건", len(posted_discussions))
+
+
+@app.post("/_e2e/trigger")
+async def e2e_trigger():
+    """대시보드 버튼에서 호출 — 캐시 모드이면 즉시 반환, 아니면 실제 웹훅 전송."""
+    use_cache = os.getenv("DEMO_USE_CACHE", "false").lower() == "true"
+
+    if use_cache:
+        asyncio.create_task(_load_cached_results())
+        logger.info("Trigger (cached mode) — 3초 후 결과 로딩")
+        return {"status": "triggered", "mode": "cached"}
+
+    review_url = os.getenv("REVIEW_SERVICE_URL", "http://localhost:8000")
+    webhook_secret = os.getenv("REVIEW_WEBHOOK_SECRET", "poc-secret")
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{review_url}/webhook",
+            json={
+                "object_kind": "merge_request",
+                "project": {"id": 1},
+                "object_attributes": {
+                    "iid": 1,
+                    "action": "open",
+                    "title": "feat: add user management module",
+                    "source_branch": "feature/security-test",
+                    "target_branch": "main",
+                },
+            },
+            headers={
+                "Content-Type": "application/json",
+                "X-Gitlab-Token": webhook_secret,
+            },
+            timeout=10,
+        )
+    logger.info("Trigger webhook → %s", resp.json())
+    return {"status": "triggered", "review_response": resp.json()}
+
+
+@app.delete("/_e2e/reset")
+async def e2e_reset():
+    """결과를 초기화한다."""
+    posted_discussions.clear()
+    return {"status": "reset"}
+
 
 @app.get("/_e2e/results")
 async def e2e_results():
@@ -199,7 +358,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                   font-size: 13px; padding: 8px 12px; white-space: pre-wrap; }
 
   /* 요약 패널 */
-  .summary-panel { width: 400px; overflow-y: auto; padding: 16px; }
+  .summary-panel { width: 560px; min-width: 480px; overflow-y: auto; padding: 16px; }
   .summary-panel h2 { font-size: 16px; margin-bottom: 12px; color: #58a6ff; }
   .summary-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px;
                   padding: 16px; margin-bottom: 12px; }
@@ -234,6 +393,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <div class="header">
   <h1>🤖 AI Code Review — E2E POC</h1>
   <span class="badge waiting" id="statusBadge">⏳ 리뷰 대기중</span>
+  <button id="btnReview" onclick="requestReview()" style="
+    background: #238636; color: #fff; border: 1px solid #2ea043; border-radius: 6px;
+    padding: 8px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s;">🚀 코드 리뷰 요청</button>
   <div class="stats">
     <div class="stat-item">🔴 Critical: <strong id="cntCritical">0</strong></div>
     <div class="stat-item">🟡 Warning: <strong id="cntWarning">0</strong></div>
@@ -250,9 +413,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   <div class="summary-panel" id="summaryPanel">
     <h2>📋 리뷰 요약</h2>
     <div class="empty-state" id="emptyState">
+      <p style="font-size:15px;">🔍 코드 리뷰를 요청해주세요</p>
+      <p style="margin-top:8px; font-size:12px;">상단의 "코드 리뷰 요청" 버튼을 클릭하세요</p>
+    </div>
+    <div class="empty-state" id="analyzingState" style="display:none;">
       <div class="spinner"></div>
       <p>AI가 코드를 분석하고 있습니다...</p>
-      <p style="margin-top:8px; font-size:12px;">webhook 전송 후 30초~2분 소요</p>
     </div>
   </div>
 </div>
@@ -309,6 +475,7 @@ function renderSummary(discussions) {
   if (general.length === 0) return;
 
   document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('analyzingState').style.display = 'none';
   // 기존 카드 제거
   panel.querySelectorAll('.summary-card').forEach(c => c.remove());
 
@@ -398,6 +565,10 @@ function updateCounts(discussions) {
     const badge = document.getElementById('statusBadge');
     badge.textContent = '✅ 리뷰 완료';
     badge.className = 'badge done';
+    const btn = document.getElementById('btnReview');
+    btn.innerHTML = '✅ 리뷰 완료';
+    btn.style.background = '#238636';
+    btn.style.borderColor = '#2ea043';
   }
 }
 
@@ -414,6 +585,22 @@ async function poll() {
       updateCounts(data.discussions);
     }
   } catch(e) {}
+}
+
+// 코드 리뷰 요청 버튼
+async function requestReview() {
+  const btn = document.getElementById('btnReview');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;vertical-align:middle;margin-right:6px"></span>리뷰 진행중...';
+  btn.style.background = '#1f6feb';
+  btn.style.borderColor = '#388bfd';
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('analyzingState').style.display = '';
+  const resp = await fetch('/_e2e/trigger', { method: 'POST' });
+  const badge = document.getElementById('statusBadge');
+  badge.textContent = '🔍 AI 분석중';
+  badge.style.background = '#58a6ff33';
+  badge.style.color = '#58a6ff';
 }
 
 // 초기 렌더링 + 2초 폴링
