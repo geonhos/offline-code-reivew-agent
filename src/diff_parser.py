@@ -54,6 +54,16 @@ class FileDiff:
         return [l for h in self.hunks for l in h.lines if l.type == "delete"]
 
 
+DEPENDENCY_PATTERNS: list[str] = [
+    r"requirements.*\.txt$",
+    r"pyproject\.toml$",
+    r"setup\.cfg$",
+    r"package\.json$",
+    r"pom\.xml$",
+    r"build\.gradle$",
+]
+
+
 @dataclass
 class DiffResult:
     files: list[FileDiff] = field(default_factory=list)
@@ -62,6 +72,14 @@ class DiffResult:
     def reviewable_files(self) -> list[FileDiff]:
         """리뷰 대상 파일만 반환한다 (바이너리, 락 파일 등 제외)."""
         return [f for f in self.files if not f.is_binary and not _should_skip(f.filename)]
+
+    @property
+    def dependency_files(self) -> list[FileDiff]:
+        """의존성 파일만 반환한다."""
+        return [
+            f for f in self.files
+            if any(re.search(p, f.filename) for p in DEPENDENCY_PATTERNS)
+        ]
 
     @property
     def summary(self) -> dict:
