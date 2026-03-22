@@ -1,7 +1,13 @@
 """CVE 결과를 ReviewComment 형식으로 변환한다."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from src.cve_scanner import CveResult
-from src.reviewer import ReviewComment
+
+if TYPE_CHECKING:
+    from src.reviewer import ReviewComment
 
 # NVD severity → ReviewComment severity 매핑
 _SEVERITY_MAP = {
@@ -12,8 +18,10 @@ _SEVERITY_MAP = {
 }
 
 
-def format_cve_comments(results: list[CveResult]) -> list[ReviewComment]:
+def format_cve_comments(results: list[CveResult]) -> list:
     """CVE 스캔 결과를 ReviewComment 리스트로 변환한다."""
+    from src.reviewer import ReviewComment
+
     comments: list[ReviewComment] = []
     for result in results:
         dep = result.dependency

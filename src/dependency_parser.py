@@ -107,7 +107,7 @@ def _parse_package_json(file_diff: FileDiff) -> list[Dependency]:
     for line in file_diff.added_lines:
         content = line.content.strip().rstrip(",")
         # "패키지명": "^버전" 또는 "패키지명": "~버전"
-        match = re.match(r'"([^"]+)"\s*:\s*"[^~]?([0-9][^"]*)"', content)
+        match = re.match(r'"([^"]+)"\s*:\s*"[~^]?([0-9][^"]*)"', content)
         if match:
             deps.append(Dependency(
                 name=match.group(1).lower(),

@@ -102,13 +102,10 @@ class TestScanDependencies:
             assert results == []
 
     def test_db_failure_returns_empty(self, scanner, flask_dep):
-        with patch.object(scanner, "_query_cve", side_effect=Exception("DB error")):
-            # _query_cve가 예외를 발생시키면 scan_dependencies도 예외가 전파됨
-            # 그러나 _query_cve 내부에서 잡히므로 실제로는 빈 리스트 반환
-            with patch("psycopg.connect", side_effect=Exception("DB error")):
-                results = scanner.scan_dependencies([flask_dep])
-                # _query_cve가 mock이므로 side_effect 전파
-                # 실제 _query_cve를 테스트할 때는 아래 테스트에서 진행
+        """DB 연결 실패 시 _query_cve가 빈 리스트를 반환하므로 결과도 빈 리스트."""
+        with patch("psycopg.connect", side_effect=Exception("DB error")):
+            results = scanner.scan_dependencies([flask_dep])
+            assert results == []
 
 
 class TestQueryCve:
