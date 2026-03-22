@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     retriever_top_k: int = 5
     score_threshold: float = 0.3
 
+    # CVE
+    cve_scan_enabled: bool = True
+    cve_severity_threshold: str = "medium"
+
     model_config = {"env_prefix": "REVIEW_"}
 
     @property
