@@ -170,6 +170,23 @@ async def version():
     return {"version": "17.8.1-mock", "revision": "mock-e2e"}
 
 
+@app.get("/api/v4/projects/{project_id}/repository/files/{file_path:path}/raw")
+async def get_file_raw(project_id: int, file_path: str, ref: str = "HEAD"):
+    """저장소 파일 내용 반환 (Mock)."""
+    from urllib.parse import unquote
+    decoded = unquote(file_path)
+    logger.info("GET /repository/files/%s/raw (ref=%s)", decoded, ref)
+    file_map = {
+        "app/user_manager.py": "\n".join(SOURCE_LINES),
+        "requirements.txt": "\n".join(SOURCE_LINES_REQ),
+    }
+    if decoded in file_map:
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(file_map[decoded])
+    from fastapi.responses import JSONResponse
+    return JSONResponse({"error": "404 File Not Found"}, status_code=404)
+
+
 @app.get("/api/v4/projects/{project_id}/merge_requests/{mr_iid}/changes")
 async def mr_changes(project_id: int, mr_iid: int):
     logger.info("GET /changes (project=%d, mr=%d)", project_id, mr_iid)

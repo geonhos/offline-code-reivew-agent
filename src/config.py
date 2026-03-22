@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     # Ollama
     ollama_base_url: str = "http://localhost:11434"
     llm_model: str = "qwen2.5-coder:7b"
+    llm_model_primary: str = "qwen2.5-coder:14b"
+    llm_model_fast: str = "qwen2.5-coder:7b"
     embed_model: str = "nomic-embed-text"
     embed_dim: int = 768
 
@@ -30,6 +32,10 @@ class Settings(BaseSettings):
     # CVE
     cve_scan_enabled: bool = True
     cve_severity_threshold: Literal["low", "medium", "high", "critical"] = "medium"
+
+    # Hybrid Agent
+    context_enrichment_enabled: bool = True
+    review_validation_enabled: bool = True
 
     model_config = {"env_prefix": "REVIEW_"}
 

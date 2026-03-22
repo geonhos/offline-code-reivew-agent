@@ -1,6 +1,7 @@
 """GitLab API v4 클라이언트 - MR diff 조회 및 코멘트 게시."""
 
 import logging
+from urllib.parse import quote
 
 import httpx
 
@@ -24,6 +25,27 @@ class GitLabClient:
             headers={"PRIVATE-TOKEN": self._token},
             timeout=30.0,
         )
+
+    # ── 파일 컨텐츠 조회 ─────────────────────────────────────
+
+    def get_file_content(
+        self, project_id: int, file_path: str, ref: str = "HEAD"
+    ) -> str:
+        """저장소의 특정 파일 내용을 조회한다."""
+        encoded_path = quote(file_path, safe="")
+        try:
+            resp = self._client.get(
+                f"/projects/{project_id}/repository/files/{encoded_path}/raw",
+                params={"ref": ref},
+            )
+            resp.raise_for_status()
+            return resp.text
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                logger.warning("파일 없음: %s (ref=%s)", file_path, ref)
+            else:
+                logger.warning("파일 조회 실패: %s (%s)", file_path, e.response.status_code)
+            return ""
 
     # ── MR diff 조회 ──────────────────────────────────────────
 
