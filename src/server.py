@@ -104,32 +104,31 @@ def run_review(project_id: int, mr_iid: int):
     logger.info("리뷰 시작: project=%s, mr_iid=%s", project_id, mr_iid)
 
     try:
-        gitlab = GitLabClient()
+        with GitLabClient() as gitlab:
+            # 1. MR diff 조회
+            diff_text = gitlab.get_mr_diff_text(project_id, mr_iid)
 
-        # 1. MR diff 조회
-        diff_text = gitlab.get_mr_diff_text(project_id, mr_iid)
+            if not diff_text.strip():
+                logger.info("변경 사항 없음: project=%s, mr_iid=%s", project_id, mr_iid)
+                return
 
-        if not diff_text.strip():
-            logger.info("변경 사항 없음: project=%s, mr_iid=%s", project_id, mr_iid)
-            return
+            # 2. 리뷰 실행
+            reviewer = Reviewer()
+            comments = reviewer.review(diff_text, project_id=project_id, mr_iid=mr_iid)
 
-        # 2. 리뷰 실행
-        reviewer = Reviewer()
-        comments = reviewer.review(diff_text, project_id=project_id, mr_iid=mr_iid)
+            logger.info(
+                "리뷰 완료: project=%s, mr_iid=%s, comments=%d",
+                project_id, mr_iid, len(comments),
+            )
 
-        logger.info(
-            "리뷰 완료: project=%s, mr_iid=%s, comments=%d",
-            project_id, mr_iid, len(comments),
-        )
-
-        # 3. 결과 게시
-        result = gitlab.post_review(project_id, mr_iid, comments)
-        logger.info(
-            "게시 완료: inline=%d, summary=%s, errors=%d",
-            result["posted_inline"],
-            result["posted_summary"],
-            len(result["errors"]),
-        )
+            # 3. 결과 게시
+            result = gitlab.post_review(project_id, mr_iid, comments)
+            logger.info(
+                "게시 완료: inline=%d, summary=%s, errors=%d",
+                result["posted_inline"],
+                result["posted_summary"],
+                len(result["errors"]),
+            )
 
     except Exception:
         logger.exception("리뷰 실패: project=%s, mr_iid=%s", project_id, mr_iid)

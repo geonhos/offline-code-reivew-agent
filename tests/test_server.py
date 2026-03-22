@@ -181,6 +181,8 @@ diff --git a/src/main.py b/src/main.py
             "posted_summary": True,
             "errors": [],
         }
+        mock_gitlab.__enter__ = MagicMock(return_value=mock_gitlab)
+        mock_gitlab.__exit__ = MagicMock(return_value=False)
 
         mock_reviewer = MagicMock()
         mock_reviewer.review.return_value = []
@@ -198,6 +200,8 @@ diff --git a/src/main.py b/src/main.py
 
         mock_gitlab = MagicMock()
         mock_gitlab.get_mr_diff_text.return_value = ""
+        mock_gitlab.__enter__ = MagicMock(return_value=mock_gitlab)
+        mock_gitlab.__exit__ = MagicMock(return_value=False)
 
         with patch("src.server.GitLabClient", return_value=mock_gitlab), \
              patch("src.server.Reviewer") as mock_reviewer_cls:

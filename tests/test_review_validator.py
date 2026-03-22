@@ -75,7 +75,7 @@ class TestDeletedCodeComment:
                                Line(number=2, content="new", type="add")])],
         )
         # line 5는 added_lines에 없음
-        assert validator._check_deleted_code_comment(comment, diff) is True
+        assert validator._check_non_added_line_comment(comment, diff) is True
 
     def test_comment_on_added_line(self, validator):
         comment = ReviewComment(file="a.py", line=1, severity="info", message="개선 필요")
@@ -84,7 +84,7 @@ class TestDeletedCodeComment:
             hunks=[Hunk(old_start=1, old_count=0, new_start=1, new_count=1,
                         lines=[Line(number=1, content="new line", type="add")])],
         )
-        assert validator._check_deleted_code_comment(comment, diff) is False
+        assert validator._check_non_added_line_comment(comment, diff) is False
 
 
 class TestValidateRules:

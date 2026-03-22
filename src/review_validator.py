@@ -64,9 +64,20 @@ class ReviewValidator:
         valid, filtered = self.validate_rules(comments, file_contexts, file_diffs)
 
         for f in filtered:
-            logger.info("오탐 필터링: %s:%d — %s", f.file, f.line, f.message[:50])
+            logger.info("오탐 필터링 (룰): %s:%d — %s", f.file, f.line, f.message[:50])
 
-        return valid
+        # critical 코멘트에 대해 LLM 재검증
+        final: list[ReviewComment] = []
+        for comment in valid:
+            if comment.severity == "critical":
+                ctx = file_contexts.get(comment.file)
+                code_context = ctx.enriched.full_source if ctx else ""
+                if code_context and not self.validate_with_llm(comment, code_context):
+                    logger.info("오탐 필터링 (LLM): %s:%d — %s", comment.file, comment.line, comment.message[:50])
+                    continue
+            final.append(comment)
+
+        return final
 
     def validate_rules(
         self,
@@ -87,7 +98,7 @@ class ReviewValidator:
                 filtered.append(comment)
             elif self._check_hardcoded_secret_false_positive(comment, full_source):
                 filtered.append(comment)
-            elif diff and self._check_deleted_code_comment(comment, diff):
+            elif diff and self._check_non_added_line_comment(comment, diff):
                 filtered.append(comment)
             else:
                 valid.append(comment)
@@ -106,17 +117,21 @@ class ReviewValidator:
 
     @staticmethod
     def _check_hardcoded_secret_false_positive(comment: ReviewComment, full_source: str) -> bool:
-        """하드코딩 비밀번호 지적이지만 환경변수를 사용하는 경우 오탐."""
+        """하드코딩 비밀번호 지적이지만 해당 라인 주변에서 환경변수를 사용하는 경우 오탐."""
         msg = comment.message.lower()
         if not any(kw in msg for kw in ("하드코딩", "hardcod", "비밀번호", "password", "secret")):
             return False
         if not full_source:
             return False
-        # 해당 라인 주변에 환경변수 패턴이 있는지 확인
-        return any(re.search(p, full_source) for p in _ENV_VAR_PATTERNS)
+        # 코멘트 라인 주변 ±10줄만 검사 (파일 전체가 아닌 지역 범위)
+        lines = full_source.split("\n")
+        start = max(0, comment.line - 11)  # 0-indexed
+        end = min(len(lines), comment.line + 10)
+        nearby = "\n".join(lines[start:end])
+        return any(re.search(p, nearby) for p in _ENV_VAR_PATTERNS)
 
     @staticmethod
-    def _check_deleted_code_comment(comment: ReviewComment, file_diff: FileDiff) -> bool:
+    def _check_non_added_line_comment(comment: ReviewComment, file_diff: FileDiff) -> bool:
         """삭제된 코드에 대한 코멘트인 경우 필터링."""
         added_lines = {line.number for line in file_diff.added_lines}
         return comment.line > 0 and comment.line not in added_lines

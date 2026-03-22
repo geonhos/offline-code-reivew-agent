@@ -65,6 +65,9 @@ class TestE2EPipeline:
         mock_reviewer = MagicMock()
         mock_reviewer.review.return_value = fake_comments
 
+        mock_gitlab.__enter__ = MagicMock(return_value=mock_gitlab)
+        mock_gitlab.__exit__ = MagicMock(return_value=False)
+
         with patch("src.server.settings") as mock_settings, \
              patch("src.server.GitLabClient", return_value=mock_gitlab), \
              patch("src.server.Reviewer", return_value=mock_reviewer):
@@ -95,6 +98,8 @@ class TestE2EPipeline:
             "posted_summary": True,
             "errors": [],
         }
+        mock_gitlab.__enter__ = MagicMock(return_value=mock_gitlab)
+        mock_gitlab.__exit__ = MagicMock(return_value=False)
 
         mock_reviewer = MagicMock()
         mock_reviewer.review.return_value = []  # 이슈 없음

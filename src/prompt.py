@@ -224,7 +224,7 @@ def build_enriched_review_prompt(
         signatures="\n".join(f"- `{sig}`" for sig in ctx.function_signatures) or "(없음)",
         classes="\n".join(f"- `{cls}`" for cls in ctx.class_names) or "(없음)",
         callers="\n".join(f"- `{c}`" for c in ctx.callers) or "(없음)",
-        full_source=ctx.full_source[:8000],  # 토큰 제한을 위해 8000자로 제한
+        full_source=ctx.full_source,  # MAX_SOURCE_LINES(3000줄)로 이미 제한됨
         diff_content=format_diff(file_diff),
         guidelines=format_guidelines(guidelines),
     )

@@ -53,7 +53,6 @@ class ContextEnricher:
     def enrich(
         self,
         project_id: int,
-        mr_iid: int,
         file_diffs: list[FileDiff],
         ref: str = "HEAD",
     ) -> list[FileContext]:
@@ -64,10 +63,11 @@ class ContextEnricher:
             full_source = self._fetch_full_source(project_id, file_diff.filename, ref)
 
             if language == "python" and full_source:
-                ctx = self._analyze_python_ast(full_source)
-                changed_funcs = self._extract_changed_function_names(file_diff, full_source)
-                if changed_funcs:
-                    ctx.callers = self._find_callers(full_source, changed_funcs)
+                ctx, tree = self._analyze_python_ast(full_source)
+                if tree:
+                    changed_funcs = self._extract_changed_function_names(file_diff, tree)
+                    if changed_funcs:
+                        ctx.callers = self._find_callers(tree, changed_funcs)
             else:
                 ctx = EnrichedContext(language=language)
 
@@ -98,13 +98,13 @@ class ContextEnricher:
             return "\n".join(lines[: self.MAX_SOURCE_LINES]) + "\n# ... (truncated)"
         return source
 
-    def _analyze_python_ast(self, source: str) -> EnrichedContext:
+    def _analyze_python_ast(self, source: str) -> tuple[EnrichedContext, ast.AST | None]:
         """Python AST를 분석하여 import, 함수, 클래스 정보를 추출한다."""
         try:
             tree = ast.parse(source)
         except SyntaxError:
             logger.warning("Python AST 파싱 실패")
-            return EnrichedContext(language="python")
+            return EnrichedContext(language="python"), None
 
         imports: list[str] = []
         functions: list[str] = []
@@ -128,7 +128,7 @@ class ContextEnricher:
             function_signatures=functions,
             class_names=classes,
             language="python",
-        )
+        ), tree
 
     @staticmethod
     def _build_function_signature(node: ast.FunctionDef) -> str:
@@ -139,25 +139,20 @@ class ContextEnricher:
             if arg.annotation:
                 try:
                     name += f": {ast.unparse(arg.annotation)}"
-                except Exception:
-                    pass
+                except AttributeError:
+                    logger.debug("어노테이션 파싱 실패: %s", arg.arg)
             args_parts.append(name)
 
         sig = f"def {node.name}({', '.join(args_parts)})"
         if node.returns:
             try:
                 sig += f" -> {ast.unparse(node.returns)}"
-            except Exception:
-                pass
+            except AttributeError:
+                logger.debug("반환 타입 파싱 실패: %s", node.name)
         return sig
 
-    def _find_callers(self, source: str, changed_functions: list[str]) -> list[str]:
+    def _find_callers(self, tree: ast.AST, changed_functions: list[str]) -> list[str]:
         """변경된 함수를 호출하는 함수 목록을 찾는다."""
-        try:
-            tree = ast.parse(source)
-        except SyntaxError:
-            return []
-
         callers: set[str] = set()
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -181,15 +176,9 @@ class ContextEnricher:
         return ""
 
     def _extract_changed_function_names(
-        self, file_diff: FileDiff, source: str
+        self, file_diff: FileDiff, tree: ast.AST
     ) -> list[str]:
         """diff에서 변경된 라인이 속하는 함수명 목록을 추출한다."""
-        try:
-            tree = ast.parse(source)
-        except SyntaxError:
-            return []
-
-        # 함수별 라인 범위 매핑
         func_ranges: list[tuple[str, int, int]] = []
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

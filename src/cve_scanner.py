@@ -62,7 +62,7 @@ class CveScanner:
                     if entries:
                         results.append(CveResult(dependency=dep, cve_entries=entries))
         except Exception:
-            logger.warning("CVE DB 연결 실패", exc_info=True)
+            logger.warning("CVE DB 연결 실패 — %d개 의존성 스캔 스킵", len(deps), exc_info=True)
 
         return results
 

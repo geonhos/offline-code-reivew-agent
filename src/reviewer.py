@@ -37,11 +37,13 @@ class Reviewer:
         self,
         retriever: Retriever | None = None,
         cve_scanner: CveScanner | None = None,
+        context_enricher=None,
+        review_validator=None,
     ):
         self._retriever = retriever or Retriever()
         self._cve_scanner = cve_scanner
-        self._context_enricher = None
-        self._review_validator = None
+        self._context_enricher = context_enricher
+        self._review_validator = review_validator
 
     def review(
         self,
@@ -101,7 +103,7 @@ class Reviewer:
             if self._context_enricher is None:
                 self._context_enricher = ContextEnricher(GitLabClient())
             contexts = self._context_enricher.enrich(
-                project_id, mr_iid or 0, diff_result.reviewable_files
+                project_id, diff_result.reviewable_files
             )
             return {ctx.file_path: ctx for ctx in contexts}
         except Exception:
@@ -150,11 +152,11 @@ class Reviewer:
                 file_diff, guidelines, file_context
             )
             model = settings.llm_model_primary
-            num_ctx = 32768
+            num_ctx = settings.llm_num_ctx_primary
         else:
             system_prompt, user_prompt = build_review_prompt(file_diff, guidelines)
             model = settings.llm_model
-            num_ctx = 8192
+            num_ctx = settings.llm_num_ctx
 
         # 3. LLM 호출
         response = self._call_llm(system_prompt, user_prompt, model=model, num_ctx=num_ctx)

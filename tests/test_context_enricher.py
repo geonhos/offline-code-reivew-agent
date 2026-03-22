@@ -62,14 +62,14 @@ class TestDetectLanguage:
 class TestAnalyzePythonAst:
     def test_extracts_imports(self, enricher):
         ce, _ = enricher
-        ctx = ce._analyze_python_ast(SAMPLE_PYTHON)
+        ctx, tree = ce._analyze_python_ast(SAMPLE_PYTHON)
         assert "os" in ctx.imports
         assert "pathlib" in ctx.imports
         assert "typing" in ctx.imports
 
     def test_extracts_function_signatures(self, enricher):
         ce, _ = enricher
-        ctx = ce._analyze_python_ast(SAMPLE_PYTHON)
+        ctx, _ = ce._analyze_python_ast(SAMPLE_PYTHON)
         sig_names = [s.split("(")[0] for s in ctx.function_signatures]
         assert "def find_order" in sig_names
         assert "def process_payment" in sig_names
@@ -78,45 +78,54 @@ class TestAnalyzePythonAst:
 
     def test_extracts_class_names(self, enricher):
         ce, _ = enricher
-        ctx = ce._analyze_python_ast(SAMPLE_PYTHON)
+        ctx, _ = ce._analyze_python_ast(SAMPLE_PYTHON)
         assert "OrderService" in ctx.class_names
 
     def test_function_signature_includes_types(self, enricher):
         ce, _ = enricher
-        ctx = ce._analyze_python_ast(SAMPLE_PYTHON)
+        ctx, _ = ce._analyze_python_ast(SAMPLE_PYTHON)
         find_order_sig = next(s for s in ctx.function_signatures if "find_order" in s)
         assert "str" in find_order_sig
         assert "dict" in find_order_sig
 
     def test_handles_syntax_error(self, enricher):
         ce, _ = enricher
-        ctx = ce._analyze_python_ast("def broken(:\n  pass")
+        ctx, tree = ce._analyze_python_ast("def broken(:\n  pass")
         assert ctx.imports == []
         assert ctx.function_signatures == []
         assert ctx.language == "python"
+        assert tree is None
 
 
 class TestFindCallers:
     def test_finds_direct_caller(self, enricher):
+        import ast
         ce, _ = enricher
-        callers = ce._find_callers(SAMPLE_PYTHON, ["helper_func"])
+        tree = ast.parse(SAMPLE_PYTHON)
+        callers = ce._find_callers(tree, ["helper_func"])
         assert "main" in callers
 
     def test_finds_method_caller(self, enricher):
+        import ast
         ce, _ = enricher
-        callers = ce._find_callers(SAMPLE_PYTHON, ["find_order"])
+        tree = ast.parse(SAMPLE_PYTHON)
+        callers = ce._find_callers(tree, ["find_order"])
         assert "process_payment" in callers
         assert "main" in callers
 
     def test_no_callers_for_unused_function(self, enricher):
+        import ast
         ce, _ = enricher
-        callers = ce._find_callers(SAMPLE_PYTHON, ["nonexistent_func"])
+        tree = ast.parse(SAMPLE_PYTHON)
+        callers = ce._find_callers(tree, ["nonexistent_func"])
         assert callers == []
 
 
 class TestExtractChangedFunctions:
     def test_maps_changed_lines_to_functions(self, enricher):
+        import ast
         ce, _ = enricher
+        tree = ast.parse(SAMPLE_PYTHON)
         file_diff = FileDiff(
             filename="test.py",
             hunks=[Hunk(
@@ -124,7 +133,7 @@ class TestExtractChangedFunctions:
                 lines=[Line(number=7, content='query = "SELECT ..."', type="add")],
             )],
         )
-        funcs = ce._extract_changed_function_names(file_diff, SAMPLE_PYTHON)
+        funcs = ce._extract_changed_function_names(file_diff, tree)
         assert "find_order" in funcs
 
 
@@ -141,7 +150,7 @@ class TestEnrich:
             )],
         )
 
-        results = ce.enrich(project_id=1, mr_iid=1, file_diffs=[file_diff])
+        results = ce.enrich(project_id=1, file_diffs=[file_diff])
         assert len(results) == 1
         assert isinstance(results[0], FileContext)
         assert results[0].enriched.language == "python"
@@ -153,7 +162,7 @@ class TestEnrich:
         mock_client.get_file_content.return_value = "public class App {}"
 
         file_diff = FileDiff(filename="App.java")
-        results = ce.enrich(project_id=1, mr_iid=1, file_diffs=[file_diff])
+        results = ce.enrich(project_id=1, file_diffs=[file_diff])
         assert results[0].enriched.language == "java"
         assert results[0].enriched.imports == []
 
@@ -162,5 +171,7 @@ class TestEnrich:
         mock_client.get_file_content.return_value = ""
 
         file_diff = FileDiff(filename="missing.py")
-        results = ce.enrich(project_id=1, mr_iid=1, file_diffs=[file_diff])
+        results = ce.enrich(project_id=1, file_diffs=[file_diff])
         assert results[0].enriched.full_source == ""
+        assert results[0].enriched.language == "python"
+        assert results[0].enriched.imports == []
