@@ -3,6 +3,8 @@
 코드 리뷰 결과에서 false positive를 제거하여 리뷰 품질을 높인다.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from dataclasses import dataclass

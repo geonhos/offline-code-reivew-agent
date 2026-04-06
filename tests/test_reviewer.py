@@ -142,3 +142,78 @@ class TestBuildSearchQuery:
 
         query = reviewer._build_search_query(long_file)
         assert len(query) <= 500
+
+
+class TestLargeDiffSkip:
+    """대용량 Diff 스킵 테스트."""
+
+    def test_skips_file_exceeding_max_diff_lines(self):
+        """max_diff_lines를 초과하는 파일은 리뷰를 건너뛴다."""
+        from src.reviewer import Reviewer, ReviewComment
+
+        # max_diff_lines를 5로 설정
+        with patch("src.reviewer.settings") as mock_settings:
+            mock_settings.max_diff_lines = 5
+            mock_settings.context_enrichment_enabled = False
+            mock_settings.review_validation_enabled = False
+            mock_settings.cve_scan_enabled = False
+
+            # 10줄의 added lines가 있는 diff (5 초과)
+            large_diff = """\
+diff --git a/big.py b/big.py
+--- a/big.py
++++ b/big.py
+@@ -1,1 +1,11 @@
+ existing
++line1
++line2
++line3
++line4
++line5
++line6
++line7
++line8
++line9
++line10
+"""
+            mock_retriever = MagicMock()
+            reviewer = Reviewer(retriever=mock_retriever)
+            comments = reviewer.review(large_diff)
+
+        # 스킵 info 코멘트가 포함되어야 함
+        assert len(comments) == 1
+        assert comments[0].severity == "info"
+        assert "big.py" in comments[0].message
+        assert "max_diff_lines" in comments[0].message
+
+    def test_reviews_file_within_max_diff_lines(self):
+        """max_diff_lines 이내인 파일은 정상 리뷰."""
+        from src.reviewer import Reviewer
+
+        with patch("src.reviewer.settings") as mock_settings:
+            mock_settings.max_diff_lines = 100
+            mock_settings.context_enrichment_enabled = False
+            mock_settings.review_validation_enabled = False
+            mock_settings.cve_scan_enabled = False
+            mock_settings.llm_model = "test"
+            mock_settings.llm_num_ctx = 8192
+            mock_settings.ollama_base_url = "http://localhost:11434"
+
+            small_diff = """\
+diff --git a/small.py b/small.py
+--- a/small.py
++++ b/small.py
+@@ -1,1 +1,2 @@
+ existing
++new_line
+"""
+            mock_retriever = MagicMock()
+            mock_retriever.search.return_value = []
+
+            reviewer = Reviewer(retriever=mock_retriever)
+
+            with patch.object(reviewer, "_call_llm", return_value='[]'):
+                comments = reviewer.review(small_diff)
+
+        # 스킵되지 않음 (빈 리뷰 결과)
+        assert len(comments) == 0

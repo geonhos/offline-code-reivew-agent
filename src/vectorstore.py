@@ -1,5 +1,7 @@
 """pgvector 기반 벡터 저장소 - 가이드라인 임베딩 CRUD 및 유사도 검색."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 import psycopg

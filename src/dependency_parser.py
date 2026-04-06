@@ -1,5 +1,7 @@
 """의존성 파일 파서 - diff에서 추가/변경된 라이브러리를 추출한다."""
 
+from __future__ import annotations
+
 import json
 import re
 from dataclasses import dataclass

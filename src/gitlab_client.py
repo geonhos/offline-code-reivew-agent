@@ -1,11 +1,15 @@
 """GitLab API v4 클라이언트 - MR diff 조회 및 코멘트 게시."""
 
+from __future__ import annotations
+
 import logging
+from typing import Optional
 from urllib.parse import quote
 
 import httpx
 
 from src.config import settings
+from src.retry import with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +29,33 @@ class GitLabClient:
             headers={"PRIVATE-TOKEN": self._token},
             timeout=30.0,
         )
+
+    # ── MR 라벨 조회 ───────────────────────────────────────────
+
+    @with_retry(max_retries=2, backoff_factor=1.0)
+    def get_mr_labels(self, project_id: int, mr_iid: int) -> list[str]:
+        """MR에 설정된 라벨 목록을 조회한다."""
+        try:
+            resp = self._client.get(
+                f"/projects/{project_id}/merge_requests/{mr_iid}",
+            )
+            resp.raise_for_status()
+            return resp.json().get("labels", [])
+        except Exception:
+            logger.warning("MR 라벨 조회 실패: project=%s, mr=%s", project_id, mr_iid)
+            return []
+
+    # ── MR 커밋 SHA 조회 ─────────────────────────────────────
+
+    @with_retry(max_retries=2, backoff_factor=1.0)
+    def get_mr_head_sha(self, project_id: int, mr_iid: int) -> str:
+        """MR의 최신 커밋 SHA를 조회한다."""
+        resp = self._client.get(
+            f"/projects/{project_id}/merge_requests/{mr_iid}",
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("sha", "")
 
     # ── 파일 컨텐츠 조회 ─────────────────────────────────────
 
@@ -49,6 +80,7 @@ class GitLabClient:
 
     # ── MR diff 조회 ──────────────────────────────────────────
 
+    @with_retry(max_retries=3, backoff_factor=1.0)
     def get_mr_changes(self, project_id: int, mr_iid: int) -> dict:
         """MR의 변경 사항(diff)을 조회한다.
 

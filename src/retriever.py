@@ -1,5 +1,7 @@
 """관련 가이드라인 검색 - RAG의 Retrieval 단계."""
 
+from __future__ import annotations
+
 from src.config import settings
 from src.embedding import embed_single
 from src.vectorstore import GuidelineChunk, VectorStore

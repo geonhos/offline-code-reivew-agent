@@ -1,5 +1,7 @@
 """Git diff 파서 - unified diff를 구조화된 데이터로 변환."""
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 

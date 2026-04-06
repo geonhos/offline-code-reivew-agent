@@ -6,6 +6,8 @@
 - 리뷰 검증: 룰 기반 + 경량 모델 (7b)
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import re
@@ -14,6 +16,7 @@ from dataclasses import dataclass
 import httpx
 
 from src.config import settings
+from src.retry import with_retry
 from src.cve_formatter import format_cve_comments
 from src.cve_scanner import CveScanner
 from src.dependency_parser import parse_dependencies_from_diff
@@ -67,8 +70,19 @@ class Reviewer:
             file_contexts = self._collect_context(project_id, mr_iid, diff_result)
 
         # 코드 리뷰
+        skipped_files: list[str] = []
         for file_diff in diff_result.reviewable_files:
             if not file_diff.added_lines and not file_diff.deleted_lines:
+                continue
+
+            # 대용량 Diff 스킵
+            total_lines = len(file_diff.added_lines) + len(file_diff.deleted_lines)
+            if total_lines > settings.max_diff_lines:
+                logger.warning(
+                    "Diff 크기 초과로 스킵: %s (%d lines > %d)",
+                    file_diff.filename, total_lines, settings.max_diff_lines,
+                )
+                skipped_files.append(file_diff.filename)
                 continue
 
             ctx = file_contexts.get(file_diff.filename)
@@ -89,6 +103,16 @@ class Reviewer:
                 all_comments.extend(cve_comments)
             except Exception:
                 logger.warning("CVE 스캔 중 오류 발생 — 코드 리뷰 결과만 반환합니다", exc_info=True)
+
+        # 스킵된 파일 정보를 info 코멘트로 추가
+        if skipped_files:
+            skipped_list = ", ".join(skipped_files)
+            all_comments.append(ReviewComment(
+                file=skipped_files[0],
+                line=0,
+                severity="info",
+                message=f"다음 파일은 변경량이 max_diff_lines({settings.max_diff_lines})을 초과하여 리뷰를 건너뛰었습니다: {skipped_list}",
+            ))
 
         return all_comments
 
@@ -172,6 +196,7 @@ class Reviewer:
         query = "\n".join(added)
         return query[:500]
 
+    @with_retry(max_retries=3, backoff_factor=2.0)
     def _call_llm(
         self,
         system_prompt: str,

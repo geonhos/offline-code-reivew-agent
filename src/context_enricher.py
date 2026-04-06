@@ -3,6 +3,8 @@
 전체 파일 소스 fetch, AST 분석(import/함수 시그니처/클래스), 호출 관계 탐지를 수행한다.
 """
 
+from __future__ import annotations
+
 import ast
 import logging
 from dataclasses import dataclass, field

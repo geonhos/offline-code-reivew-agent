@@ -26,6 +26,12 @@ app = FastAPI(title="Mock GitLab API", version="17.8.1-mock")
 # ── 수집된 리뷰 코멘트 저장소 ────────────────────────────────────
 posted_discussions: list[dict] = []
 
+# ── E2E 제어용 상태 ─────────────────────────────────────────────
+mr_state: dict = {
+    "sha": "abc123head",
+    "labels": [],
+}
+
 # ── 테스트 소스코드 (라인 번호 매핑용) ────────────────────────────
 SOURCE_LINES = [
     '"""주문 처리 서비스 - 결제·재고·알림 통합 모듈."""',
@@ -187,6 +193,22 @@ async def get_file_raw(project_id: int, file_path: str, ref: str = "HEAD"):
     return JSONResponse({"error": "404 File Not Found"}, status_code=404)
 
 
+@app.get("/api/v4/projects/{project_id}/merge_requests/{mr_iid}")
+async def mr_detail(project_id: int, mr_iid: int):
+    """MR 상세 정보 — sha, labels 포함."""
+    logger.info("GET /merge_requests/%d (project=%d)", mr_iid, project_id)
+    return {
+        "id": mr_iid,
+        "iid": mr_iid,
+        "title": "feat: add user management module",
+        "state": "opened",
+        "sha": mr_state["sha"],
+        "labels": mr_state["labels"],
+        "source_branch": "feature/security-test",
+        "target_branch": "main",
+    }
+
+
 @app.get("/api/v4/projects/{project_id}/merge_requests/{mr_iid}/changes")
 async def mr_changes(project_id: int, mr_iid: int):
     logger.info("GET /changes (project=%d, mr=%d)", project_id, mr_iid)
@@ -298,6 +320,7 @@ async def e2e_trigger():
                     "title": "feat: add user management module",
                     "source_branch": "feature/security-test",
                     "target_branch": "main",
+                    "labels": [{"title": lb} for lb in mr_state.get("labels", [])],
                 },
             },
             headers={
@@ -315,6 +338,18 @@ async def e2e_reset():
     """결과를 초기화한다."""
     posted_discussions.clear()
     return {"status": "reset"}
+
+
+@app.post("/_e2e/set_mr_state")
+async def e2e_set_mr_state(request: Request):
+    """MR 상태(sha, labels)를 제어한다."""
+    body = await request.json()
+    if "sha" in body:
+        mr_state["sha"] = body["sha"]
+    if "labels" in body:
+        mr_state["labels"] = body["labels"]
+    logger.info("MR 상태 변경: sha=%s, labels=%s", mr_state["sha"], mr_state["labels"])
+    return {"status": "updated", "mr_state": mr_state}
 
 
 @app.get("/_e2e/results")
@@ -361,7 +396,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   .container { display: flex; height: calc(100vh - 60px); }
 
   /* 코드 패널 */
-  .code-panel { flex: 1; overflow-y: auto; border-right: 1px solid #30363d; }
+  .code-panel { width: 420px; min-width: 360px; overflow-y: auto; border-right: 1px solid #30363d; }
   .file-header { background: #161b22; padding: 8px 16px; font-size: 13px;
                  color: #8b949e; border-bottom: 1px solid #30363d;
                  position: sticky; top: 0; z-index: 10; }
@@ -382,25 +417,25 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                   font-size: 13px; padding: 8px 12px; white-space: pre-wrap; }
 
   /* 요약 패널 */
-  .summary-panel { width: 560px; min-width: 480px; overflow-y: auto; padding: 16px; }
+  .summary-panel { flex: 1; overflow-y: auto; padding: 16px; }
   .summary-panel h2 { font-size: 16px; margin-bottom: 12px; color: #58a6ff; }
   .summary-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px;
                   padding: 16px; margin-bottom: 12px; }
   .summary-card h3 { font-size: 14px; margin-bottom: 8px; }
-  .summary-body { font-size: 13px; line-height: 1.6;
-                  max-height: 500px; overflow-y: auto; }
-  .summary-body p { margin-bottom: 8px; }
-  .summary-body .summary-title { font-size: 15px; margin-bottom: 6px; }
-  .summary-body .summary-stats { color: #8b949e; margin-bottom: 12px; }
-  .review-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
-  .review-table th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #30363d;
+  .summary-body { font-size: 15px; line-height: 1.7;
+                  max-height: 600px; overflow-y: auto; }
+  .summary-body p { margin-bottom: 10px; }
+  .summary-body .summary-title { font-size: 17px; margin-bottom: 8px; }
+  .summary-body .summary-stats { color: #8b949e; margin-bottom: 14px; }
+  .review-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
+  .review-table th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #30363d;
                      color: #8b949e; font-weight: 600; }
-  .review-table td { padding: 6px 8px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  .review-table td { padding: 8px 10px; border-bottom: 1px solid #21262d; vertical-align: top; }
   .review-table tr:hover { background: #1c2128; }
-  .review-table .cell-file { color: #58a6ff; font-family: 'SF Mono', Consolas, monospace; font-size: 11px; }
+  .review-table .cell-file { color: #58a6ff; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; }
   .review-table .cell-line { color: #8b949e; text-align: center; }
   .review-table .cell-sev { text-align: center; }
-  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 13px; font-weight: 600; }
   .pill-critical { background: #f8514933; color: #f85149; }
   .pill-warning { background: #d2992233; color: #e3b341; }
   .pill-info { background: #58a6ff33; color: #58a6ff; }
@@ -422,13 +457,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   /* CVE 섹션 */
   .cve-section { margin-top: 16px; }
   .cve-card { background: #1c1215; border: 1px solid #f8514944; border-radius: 8px;
-              padding: 12px 16px; margin-bottom: 8px; }
-  .cve-card h4 { font-size: 13px; color: #f85149; margin-bottom: 4px; }
-  .cve-card .cve-pkg { color: #58a6ff; font-family: 'SF Mono', Consolas, monospace; font-size: 12px; }
-  .cve-card .cve-desc { color: #8b949e; font-size: 12px; margin-top: 4px; line-height: 1.5; }
-  .cve-card .cve-fix { color: #3fb950; font-size: 12px; margin-top: 4px; }
-  .cve-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-  .cve-header h3 { font-size: 15px; color: #f85149; }
+              padding: 14px 18px; margin-bottom: 10px; }
+  .cve-card h4 { font-size: 15px; color: #f85149; margin-bottom: 6px; }
+  .cve-card .cve-pkg { color: #58a6ff; font-family: 'SF Mono', Consolas, monospace; font-size: 14px; }
+  .cve-card .cve-desc { color: #8b949e; font-size: 14px; margin-top: 6px; line-height: 1.6; }
+  .cve-card .cve-fix { color: #3fb950; font-size: 14px; margin-top: 6px; }
+  .cve-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .cve-header h3 { font-size: 17px; color: #f85149; }
   .cve-count { background: #f8514933; color: #f85149; padding: 2px 8px;
                border-radius: 10px; font-size: 12px; font-weight: 600; }
 </style>

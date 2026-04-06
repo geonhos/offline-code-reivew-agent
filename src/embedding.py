@@ -1,5 +1,7 @@
 """임베딩 생성 - Ollama nomic-embed-text 모델 사용."""
 
+from __future__ import annotations
+
 import httpx
 
 from src.config import settings
