@@ -33,6 +33,25 @@ class Settings(BaseSettings):
     retriever_top_k: int = 5
     score_threshold: float = 0.3
 
+    # Cloud LLM
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    openai_model: str = "gpt-4o"
+    anthropic_model: str = "claude-sonnet-4-20250514"
+
+    # Benchmark
+    benchmark_offline_models: list[str] = [
+        "codegemma:7b-instruct",
+        "granite-code:8b",
+        "starcoder2:15b",
+        "codestral:22b",
+    ]
+    benchmark_cloud_models: list[str] = [
+        "gpt-4o",
+        "claude-sonnet-4-20250514",
+    ]
+    benchmark_num_ctx: int = 8192
+
     # CVE
     cve_scan_enabled: bool = True
     cve_severity_threshold: Literal["low", "medium", "high", "critical"] = "medium"
@@ -41,7 +60,7 @@ class Settings(BaseSettings):
     context_enrichment_enabled: bool = True
     review_validation_enabled: bool = True
 
-    model_config = {"env_prefix": "REVIEW_"}
+    model_config = {"env_prefix": "REVIEW_", "env_file": ".env"}
 
     @property
     def database_url(self) -> str:

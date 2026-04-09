@@ -1,0 +1,72 @@
+{
+  "sample.diff": {
+    "description": "Python 보안 이슈 (131줄)",
+    "issues": {
+      "하드코딩 비밀번호": {
+        "keywords": ["password", "하드코딩", "환경 변수", "secret", "api_key", "hardcod"],
+        "severity": "critical",
+        "description": "DB_PASSWORD 하드코딩"
+      },
+      "SQL 인젝션": {
+        "keywords": ["sql", "injection", "인젝션", "f-string", "파라미터", "format"],
+        "severity": "critical",
+        "description": "f-string으로 직접 SQL 쿼리 조합"
+      },
+      "빈 except 절": {
+        "keywords": ["except", "예외", "exception"],
+        "severity": "warning",
+        "description": "bare except without specific exception type"
+      }
+    }
+  },
+  "springboot-ddd.diff": {
+    "description": "Spring Boot DDD 아키텍처 (654줄)",
+    "issues": {
+      "도메인 레이어 의존성 위반": {
+        "keywords": ["domain", "도메인", "의존성", "infrastructure", "인프라"],
+        "severity": "warning",
+        "description": "도메인 레이어에서 인프라 레이어 직접 참조"
+      },
+      "트랜잭션 처리 누락": {
+        "keywords": ["transactional", "transaction", "트랜잭션"],
+        "severity": "warning",
+        "description": "@Transactional 누락"
+      },
+      "N+1 쿼리 문제": {
+        "keywords": ["n+1", "fetchtype", "lazy", "eager", "join", "fetch"],
+        "severity": "warning",
+        "description": "연관 엔티티 LAZY 로딩으로 N+1 발생 가능"
+      },
+      "예외 처리 미흡": {
+        "keywords": ["exception", "예외", "orelsethrow", "optional"],
+        "severity": "info",
+        "description": "Optional 미사용, 예외 처리 부재"
+      }
+    }
+  },
+  "ecommerce-platform.diff": {
+    "description": "이커머스 플랫폼 (1223줄)",
+    "issues": {
+      "하드코딩 비밀번호": {
+        "keywords": ["password", "secret", "하드코딩", "hardcod", "yml", "yaml"],
+        "severity": "critical",
+        "description": "application.yml에 DB 비밀번호 하드코딩"
+      },
+      "MD5 취약한 해시": {
+        "keywords": ["md5", "sha", "bcrypt", "해시", "hash", "passwordencoder"],
+        "severity": "critical",
+        "description": "MD5 사용 — BCrypt 등 안전한 해시로 대체 필요"
+      },
+      "SQL 인젝션": {
+        "keywords": ["sql", "injection", "인젝션", "preparedstatement", "파라미터"],
+        "severity": "critical",
+        "description": "문자열 연결 SQL 쿼리"
+      },
+      "JWT 시크릿 하드코딩": {
+        "keywords": ["jwt", "secret", "signing", "서명", "토큰"],
+        "severity": "critical",
+        "description": "JWT signing key가 하드코딩"
+      }
+    }
+  }
+}
