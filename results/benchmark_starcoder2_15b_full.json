@@ -1,0 +1,79 @@
+[
+  {
+    "model": "starcoder2:15b (full)",
+    "diff_name": "sample.diff",
+    "diff_lines": 74,
+    "review_time_sec": 10.096,
+    "comment_count": 0,
+    "comments_by_severity": {
+      "critical": 0,
+      "warning": 0,
+      "info": 0
+    },
+    "json_parse_success": false,
+    "raw_response": "[]",
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "cost_usd": 0.0,
+    "detected_issues": [],
+    "expected_issues": [
+      "하드코딩 비밀번호",
+      "SQL 인젝션",
+      "빈 except 절"
+    ],
+    "detection_rate": 0.0
+  },
+  {
+    "model": "starcoder2:15b (full)",
+    "diff_name": "springboot-ddd.diff",
+    "diff_lines": 570,
+    "review_time_sec": 39.262,
+    "comment_count": 0,
+    "comments_by_severity": {
+      "critical": 0,
+      "warning": 0,
+      "info": 0
+    },
+    "json_parse_success": false,
+    "raw_response": "[]",
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "cost_usd": 0.0,
+    "detected_issues": [],
+    "expected_issues": [
+      "도메인 레이어 의존성 위반",
+      "트랜잭션 처리 누락",
+      "N+1 쿼리 문제",
+      "예외 처리 미흡"
+    ],
+    "detection_rate": 0.0
+  },
+  {
+    "model": "starcoder2:15b (full)",
+    "diff_name": "ecommerce-platform.diff",
+    "diff_lines": 1055,
+    "review_time_sec": 82.764,
+    "comment_count": 0,
+    "comments_by_severity": {
+      "critical": 0,
+      "warning": 0,
+      "info": 0
+    },
+    "json_parse_success": false,
+    "raw_response": "[]",
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "cost_usd": 0.0,
+    "detected_issues": [],
+    "expected_issues": [
+      "하드코딩 비밀번호",
+      "MD5 취약한 해시",
+      "SQL 인젝션",
+      "JWT 시크릿 하드코딩"
+    ],
+    "detection_rate": 0.0
+  }
+]

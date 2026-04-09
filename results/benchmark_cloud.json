@@ -1,0 +1,165 @@
+[
+  {
+    "model": "gpt-4o",
+    "diff_name": "sample.diff",
+    "diff_lines": 74,
+    "review_time_sec": 3.352,
+    "comment_count": 2,
+    "comments_by_severity": {
+      "critical": 1,
+      "warning": 0,
+      "info": 1
+    },
+    "json_parse_success": true,
+    "raw_response": "```json\n[\n  {\n    \"file\": \"src/main.py\",\n    \"line\": 3,\n    \"severity\": \"info\",\n    \"message\": \"sys 모듈이 추가되었으나 사용되지 않고 있습니다. 필요하지 않다면 제거하세요.\"\n  },\n  {\n    \"file\": \"src/main.py\",\n    \"line\": 13,\n    \"severity\": \"critical\",\n    \"message\": \"password 변수가 정의되지 않았습니다. 보안상의 이유로 하드코딩된 비밀번호를 사용하지 말고 환경 변수로 대체하세요.\"\n  }\n]\n```",
+    "input_tokens": 590,
+    "output_tokens": 124,
+    "total_tokens": 714,
+    "cost_usd": 0.002715,
+    "detected_issues": [
+      "하드코딩 비밀번호"
+    ],
+    "expected_issues": [
+      "하드코딩 비밀번호",
+      "SQL 인젝션",
+      "빈 except 절"
+    ],
+    "detection_rate": 0.3333
+  },
+  {
+    "model": "gpt-4o",
+    "diff_name": "springboot-ddd.diff",
+    "diff_lines": 570,
+    "review_time_sec": 1.561,
+    "comment_count": 0,
+    "comments_by_severity": {
+      "critical": 0,
+      "warning": 0,
+      "info": 0
+    },
+    "json_parse_success": true,
+    "raw_response": "```json\n[]\n```",
+    "input_tokens": 996,
+    "output_tokens": 5,
+    "total_tokens": 1001,
+    "cost_usd": 0.00254,
+    "detected_issues": [],
+    "expected_issues": [
+      "도메인 레이어 의존성 위반",
+      "트랜잭션 처리 누락",
+      "N+1 쿼리 문제",
+      "예외 처리 미흡"
+    ],
+    "detection_rate": 0.0
+  },
+  {
+    "model": "gpt-4o",
+    "diff_name": "ecommerce-platform.diff",
+    "diff_lines": 1055,
+    "review_time_sec": 1.396,
+    "comment_count": 0,
+    "comments_by_severity": {
+      "critical": 0,
+      "warning": 0,
+      "info": 0
+    },
+    "json_parse_success": false,
+    "raw_response": "",
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "cost_usd": 0.0,
+    "detected_issues": [],
+    "expected_issues": [
+      "하드코딩 비밀번호",
+      "MD5 취약한 해시",
+      "SQL 인젝션",
+      "JWT 시크릿 하드코딩"
+    ],
+    "detection_rate": 0.0
+  },
+  {
+    "model": "claude-sonnet-4-20250514",
+    "diff_name": "sample.diff",
+    "diff_lines": 74,
+    "review_time_sec": 6.04,
+    "comment_count": 4,
+    "comments_by_severity": {
+      "critical": 2,
+      "warning": 1,
+      "info": 1
+    },
+    "json_parse_success": true,
+    "raw_response": "```json\n[\n  {\n    \"file\": \"src/main.py\",\n    \"line\": 10,\n    \"severity\": \"critical\",\n    \"message\": \"환경 변수 API_KEY에 대한 예외 처리가 없습니다. KeyError 발생 시 애플리케이션이 중단될 수 있으므로 os.environ.get()을 사용하거나 try-except로 처리하세요.\"\n  },\n  {\n    \"file\": \"src/main.py\",\n    \"line\": 13,\n    \"severity\": \"critical\",\n    \"message\": \"정의되지 않은 변수 'password'를 참조하고 있습니다. NameError가 발생할 것입니다.\"\n  },\n  {\n    \"file\": \"src/main.py\",\n    \"line\": 12,\n    \"severity\": \"warning\",\n    \"message\": \"connect 함수가 import되지 않았습니다. 필요한 모듈을 import하세요.\"\n  },\n  {\n    \"file\": \"src/main.py\",\n    \"line\": 2,\n    \"severity\": \"info\",\n    \"message\": \"sys 모듈이 import되었지만 사용되지 않고 있습니다. 불필요한 import는 제거하세요.\"\n  }\n]\n```",
+    "input_tokens": 856,
+    "output_tokens": 361,
+    "total_tokens": 1217,
+    "cost_usd": 0.007983,
+    "detected_issues": [
+      "하드코딩 비밀번호",
+      "빈 except 절"
+    ],
+    "expected_issues": [
+      "하드코딩 비밀번호",
+      "SQL 인젝션",
+      "빈 except 절"
+    ],
+    "detection_rate": 0.6667
+  },
+  {
+    "model": "claude-sonnet-4-20250514",
+    "diff_name": "springboot-ddd.diff",
+    "diff_lines": 570,
+    "review_time_sec": 8.393,
+    "comment_count": 5,
+    "comments_by_severity": {
+      "critical": 0,
+      "warning": 4,
+      "info": 1
+    },
+    "json_parse_success": true,
+    "raw_response": "```json\n[\n  {\n    \"file\": \"order-domain/src/main/java/com/example/order/domain/Order.java\",\n    \"line\": 42,\n    \"severity\": \"warning\",\n    \"message\": \"정적 팩토리 메서드에서 null 체크가 없습니다. memberId, address, phone, items 파라미터에 대한 유효성 검증을 추가하세요.\"\n  },\n  {\n    \"file\": \"order-domain/src/main/java/com/example/order/domain/Order.java\",\n    \"line\": 50,\n    \"severity\": \"warning\",\n    \"message\": \"items 리스트가 비어있을 경우에 대한 검증이 없습니다. 빈 주문을 방지하기 위해 검증 로직을 추가하세요.\"\n  },\n  {\n    \"file\": \"order-domain/src/main/java/com/example/order/domain/Order.java\",\n    \"line\": 60,\n    \"severity\": \"info\",\n    \"message\": \"OrderItem의 setOrder 메서드가 public으로 노출되어 있을 가능성이 있습니다. 양방향 연관관계 설정 시 캡슐화를 고려하세요.\"\n  },\n  {\n    \"file\": \"order-domain/src/main/java/com/example/order/domain/Order.java\",\n    \"line\": 71,\n    \"severity\": \"warning\",\n    \"message\": \"주문 취소 시 상태 검증이 없습니다. 이미 완료되거나 취소된 주문은 취소할 수 없도록 상태 검증을 추가하세요.\"\n  },\n  {\n    \"file\": \"order-domain/src/main/java/com/example/order/domain/Order.java\",\n    \"line\": 76,\n    \"severity\": \"warning\",\n    \"message\": \"주문 완료 시 상태 검증이 없습니다. 취소된 주문은 완료할 수 없도록 상태 검증을 추가하세요.\"\n  }\n]\n```",
+    "input_tokens": 1392,
+    "output_tokens": 580,
+    "total_tokens": 1972,
+    "cost_usd": 0.012876,
+    "detected_issues": [
+      "도메인 레이어 의존성 위반"
+    ],
+    "expected_issues": [
+      "도메인 레이어 의존성 위반",
+      "트랜잭션 처리 누락",
+      "N+1 쿼리 문제",
+      "예외 처리 미흡"
+    ],
+    "detection_rate": 0.25
+  },
+  {
+    "model": "claude-sonnet-4-20250514",
+    "diff_name": "ecommerce-platform.diff",
+    "diff_lines": 1055,
+    "review_time_sec": 12.584,
+    "comment_count": 7,
+    "comments_by_severity": {
+      "critical": 3,
+      "warning": 3,
+      "info": 1
+    },
+    "json_parse_success": true,
+    "raw_response": "```json\n[\n  {\n    \"file\": \"user-service/src/main/java/com/example/userservice/controller/UserController.java\",\n    \"line\": 19,\n    \"severity\": \"critical\",\n    \"message\": \"@Valid 어노테이션과 입력값 검증이 누락되었습니다. 요청 데이터의 유효성을 검증하세요.\"\n  },\n  {\n    \"file\": \"user-service/src/main/java/com/example/userservice/controller/UserController.java\",\n    \"line\": 21,\n    \"severity\": \"warning\",\n    \"message\": \"이메일 형식 검증이 없습니다. 정규식이나 validation 라이브러리를 사용하여 이메일 형식을 검증하세요.\"\n  },\n  {\n    \"file\": \"user-service/src/main/java/com/example/userservice/controller/UserController.java\",\n    \"line\": 26,\n    \"severity\": \"critical\",\n    \"message\": \"@Valid 어노테이션과 입력값 검증이 누락되었습니다. 로그인 요청 데이터의 유효성을 검증하세요.\"\n  },\n  {\n    \"file\": \"user-service/src/main/java/com/example/userservice/controller/UserController.java\",\n    \"line\": 32,\n    \"severity\": \"warning\",\n    \"message\": \"Authorization 헤더에서 Bearer 토큰 추출 로직이 없습니다. 'Bearer ' 접두사를 제거하는 처리를 추가하세요.\"\n  },\n  {\n    \"file\": \"user-service/src/main/java/com/example/userservice/controller/UserController.java\",\n    \"line\": 39,\n    \"severity\": \"critical\",\n    \"message\": \"Map<String, String>으로 받는 것보다 전용 DTO 클래스를 사용하는 것이 좋습니다. 타입 안정성과 검증을 위해 UpdateProfileRequest DTO를 생성하세요.\"\n  },\n  {\n    \"file\": \"user-service/src/main/java/com/example/userservice/controller/UserController.java\",\n    \"line\": 41,\n    \"severity\": \"warning\",\n    \"message\": \"프로필 업데이트 시에도 이메일 형식 검증이 없습니다. 이메일 변경 시 유효성 검증을 추가하세요.\"\n  },\n  {\n    \"file\": \"user-service/src/main/java/com/example/userservice/controller/UserController.java\",\n    \"line\": 19,\n    \"severity\": \"info\",\n    \"message\": \"예외 처리가 없습니다. @ExceptionHandler나 전역 예외 처리기를 통해 적절한 에러 응답을 제공하는 것을 고려하세요.\"\n  }\n]\n```",
+    "input_tokens": 1249,
+    "output_tokens": 793,
+    "total_tokens": 2042,
+    "cost_usd": 0.015642,
+    "detected_issues": [
+      "JWT 시크릿 하드코딩"
+    ],
+    "expected_issues": [
+      "하드코딩 비밀번호",
+      "MD5 취약한 해시",
+      "SQL 인젝션",
+      "JWT 시크릿 하드코딩"
+    ],
+    "detection_rate": 0.25
+  }
+]

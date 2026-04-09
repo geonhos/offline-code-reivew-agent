@@ -1,0 +1,84 @@
+[
+  {
+    "model": "codestral:22b",
+    "diff_name": "sample.diff",
+    "diff_lines": 74,
+    "review_time_sec": 17.374,
+    "comment_count": 2,
+    "comments_by_severity": {
+      "critical": 1,
+      "warning": 1,
+      "info": 0
+    },
+    "json_parse_success": true,
+    "raw_response": " ```json\n[\n  {\n    \"file\": \"src/main.py\",\n    \"line\": 5,\n    \"severity\": \"critical\",\n    \"message\": \"비밀번호가 하드코딩되어 있습니다. 환경 변수(os.environ)로 대체하세요.\"\n  },\n  {\n    \"file\": \"src/main.py\",\n    \"line\": 10,\n    \"severity\": \"warning\",\n    \"message\": \"함수가 예외를 던지지만 호출자에게는 알리지 않습니다. 적절한 오류 처리나 로깅을 추가하세요.\"\n  }\n]\n```",
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "cost_usd": 0.0,
+    "detected_issues": [
+      "하드코딩 비밀번호",
+      "빈 except 절"
+    ],
+    "expected_issues": [
+      "하드코딩 비밀번호",
+      "SQL 인젝션",
+      "빈 except 절"
+    ],
+    "detection_rate": 0.6667
+  },
+  {
+    "model": "codestral:22b",
+    "diff_name": "springboot-ddd.diff",
+    "diff_lines": 570,
+    "review_time_sec": 59.018,
+    "comment_count": 4,
+    "comments_by_severity": {
+      "critical": 0,
+      "warning": 4,
+      "info": 0
+    },
+    "json_parse_success": true,
+    "raw_response": "주어진 코드는 Java로 작성된 주문(Order) 도메인 클래스의 구현입니다. 전체적으로 잘 작성되었지만, 몇 가지 개선할 수 있는 부분이 있습니다.\n\n1. `Order` 엔티티에서 `memberId`를 직접 관리하고 있습니다. 도메인 모델링의 관점에서, `Member`와 `Order`는 연관 관계가 있으므로 `Member` 엔티티를 필드로 갖는 것이 더 적합할 수 있습니다.\n2. `calculateTotal()` 메서드에서 BigDecimal을 사용하여 총액을 계산하고 있지만, 주문 아이템(OrderItem)의 가격과 수량은 int나 long으로 선언되어 있습니다. 이는 정확한 계산을 위해 BigDecimal을 사용하는 것이 좋습니다.\n3. `create()` 메서드에서 주문 생성 시점에 총액을 계산하고 있지만, 주문 아이템의 가격이나 수량이 변경될 수 있습니다. 따라서 총액은 필요할 때마다 동적으로 계산하는 것이 좋습니다.\n4. `cancel()`과 `complete()` 메서드에서 주문의 상태를 변경하고 있지만, 상태 변화에 대한 검증 로직이 없습니다. 예를 들어, 이미 취소된 주문을 다시 취소하려는 경우나 완료된 주문을 취소하려는 경우에 대한 처리가 필요합니다.\n\n따라서 아래와 같은 리뷰를 제안할 수 있습니다:\n\n```json\n[\n  {\n    \"file\": \"order-domain/src/main/java/com/example/order/domain/Order.java\",\n    \"line\": 20,\n    \"severity\": \"warning\",\n    \"message\": \"Member와의 연관 관계를 고려하여 Member 엔티티를 필드로 갖는 것이 좋습니다.\"\n  },\n  {\n    \"file\": \"order-domain/src/main/java/com/example/order/domain/Order.java\",\n    \"line\": 38,\n    \"severity\": \"warning\",\n    \"message\": \"주문 아이템의 가격과 수량은 BigDecimal로 선언하는 것이 좋습니다.\"\n  },\n  {\n    \"file\": \"order-domain/src/main/java/com/example/order/domain/Order.java\",\n    \"line\": 49,\n    \"severity\": \"warning\",\n    \"message\": \"총액은 필요할 때마다 동적으로 계산하는 것이 좋습니다.\"\n  },\n  {\n    \"file\": \"order-domain/src/main/java/com/example/order/domain/Order.java\",\n    \"line\": 65,\n    \"severity\": \"warning\",\n    \"message\": \"주문의 상태를 변경할 때 검증 로직을 추가하는 것이 좋습니다.\"\n  }\n]\n```",
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "cost_usd": 0.0,
+    "detected_issues": [
+      "도메인 레이어 의존성 위반"
+    ],
+    "expected_issues": [
+      "도메인 레이어 의존성 위반",
+      "트랜잭션 처리 누락",
+      "N+1 쿼리 문제",
+      "예외 처리 미흡"
+    ],
+    "detection_rate": 0.25
+  },
+  {
+    "model": "codestral:22b",
+    "diff_name": "ecommerce-platform.diff",
+    "diff_lines": 1055,
+    "review_time_sec": 19.321,
+    "comment_count": 2,
+    "comments_by_severity": {
+      "critical": 2,
+      "warning": 0,
+      "info": 0
+    },
+    "json_parse_success": true,
+    "raw_response": " [\n     {\n       \"file\": \"user-service/src/main/java/com/example/userservice/controller/UserController.java\",\n       \"line\": 20,\n       \"severity\": \"critical\",\n       \"message\": \"이메일 형식을 검증하지 않고 바로 저장합니다. 유효한 이메일인지 확인하는 로직을 추가하세요.\"\n     },\n     {\n       \"file\": \"user-service/src/main/java/com/example/userservice/controller/UserController.java\",\n       \"line\": 35,\n       \"severity\": \"critical\",\n       \"message\": \"이메일을 변경할 때에도 형식을 검증하지 않습니다. 유효한 이메일인지 확인하는 로직을 추가하세요.\"\n     }\n   ]",
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "cost_usd": 0.0,
+    "detected_issues": [],
+    "expected_issues": [
+      "하드코딩 비밀번호",
+      "MD5 취약한 해시",
+      "SQL 인젝션",
+      "JWT 시크릿 하드코딩"
+    ],
+    "detection_rate": 0.0
+  }
+]
